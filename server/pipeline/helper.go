@@ -18,17 +18,23 @@ import (
 	"context"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/errgroup"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge"
 	"go.woodpecker-ci.org/woodpecker/v3/server/model"
 )
 
+const maxConcurrentStatusUpdates = 8
+
 func updatePipelineStatus(ctx context.Context, forge forge.Forge, pipeline *model.Pipeline, repo *model.Repo, user *model.User) {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentStatusUpdates)
 	for _, workflow := range pipeline.Workflows {
-		err := forge.Status(ctx, user, repo, pipeline, workflow)
-		if err != nil {
-			log.Error().Err(err).Msgf("error setting commit status for %s/%d", repo.FullName, pipeline.Number)
-			return
-		}
+		g.Go(func() error {
+			return forge.Status(ctx, user, repo, pipeline, workflow)
+		})
+	}
+	if err := g.Wait(); err != nil {
+		log.Error().Err(err).Msgf("error setting commit status for %s/%d", repo.FullName, pipeline.Number)
 	}
 }
