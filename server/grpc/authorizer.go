@@ -16,13 +16,25 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+type agentIDKey struct{}
+
+// withAgentID stores the JWT-verified agent id in the context.
+func withAgentID(ctx context.Context, agentID int64) context.Context {
+	return context.WithValue(ctx, agentIDKey{}, agentID)
+}
+
+// agentIDFromContext returns the JWT-verified agent id set by the Authorizer.
+func agentIDFromContext(ctx context.Context) (int64, bool) {
+	agentID, ok := ctx.Value(agentIDKey{}).(int64)
+	return agentID, ok
+}
 
 type StreamContextWrapper interface {
 	grpc.ServerStream
@@ -101,7 +113,5 @@ func (a *Authorizer) authorize(ctx context.Context, fullMethod string) (context.
 		return ctx, status.Errorf(codes.Unauthenticated, "access token is invalid: %v", err)
 	}
 
-	md.Append("agent_id", fmt.Sprintf("%d", claims.AgentID))
-
-	return metadata.NewIncomingContext(ctx, md), nil
+	return withAgentID(ctx, claims.AgentID), nil
 }

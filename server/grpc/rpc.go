@@ -591,20 +591,9 @@ func (s *RPC) notify(repo *model.Repo, pipeline *model.Pipeline) (err error) {
 }
 
 func (s *RPC) getAgentFromContext(ctx context.Context) (*model.Agent, error) {
-	md, ok := grpcMetadata.FromIncomingContext(ctx)
+	agentID, ok := agentIDFromContext(ctx)
 	if !ok {
-		return nil, errors.New("metadata is not provided")
-	}
-
-	values := md["agent_id"]
-	if len(values) == 0 {
 		return nil, errors.New("agent_id is not provided")
-	}
-
-	_agentID := values[0]
-	agentID, err := strconv.ParseInt(_agentID, 10, 64)
-	if err != nil {
-		return nil, errors.New("agent_id is not a valid integer")
 	}
 
 	return s.store.AgentFind(agentID)
