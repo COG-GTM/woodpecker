@@ -213,7 +213,7 @@ func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 
 	opts := &bb.RepositorySearchOptions{Permission: bb.PermissionRepoWrite, ListOptions: bb.ListOptions{Limit: listLimit}}
 	all := make([]*model.Repo, 0)
-	byID := make(map[model.ForgeRemoteID]int, len(all))
+	byID := make(map[model.ForgeRemoteID]int)
 	for {
 		repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
 		if err != nil {
