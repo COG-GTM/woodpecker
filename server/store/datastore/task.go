@@ -32,3 +32,37 @@ func (s storage) TaskInsert(task *model.Task) error {
 func (s storage) TaskDelete(id string) error {
 	return wrapDelete(s.engine.Where("id = ?", id).Delete(new(model.Task)))
 }
+
+func (s storage) TaskInsertAtOnce(tasks []*model.Task) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+
+	// insert in chunks to stay below the SQL placeholder limit
+	const chunkSize = 100
+	for start := 0; start < len(tasks); start += chunkSize {
+		end := start + chunkSize
+		if end > len(tasks) {
+			end = len(tasks)
+		}
+		if _, err := sess.Insert(tasks[start:end]); err != nil {
+			return err
+		}
+	}
+
+	return sess.Commit()
+}
+
+func (s storage) TaskDeleteAtOnce(ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.engine.In("id", ids).Delete(new(model.Task))
+	return err
+}

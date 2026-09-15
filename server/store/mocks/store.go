@@ -2550,6 +2550,24 @@ func (_m *Store) TaskDelete(_a0 string) error {
 	return r0
 }
 
+// TaskDeleteAtOnce provides a mock function with given fields: _a0
+func (_m *Store) TaskDeleteAtOnce(_a0 []string) error {
+	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for TaskDeleteAtOnce")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]string) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // TaskInsert provides a mock function with given fields: _a0
 func (_m *Store) TaskInsert(_a0 *model.Task) error {
 	ret := _m.Called(_a0)
@@ -2560,6 +2578,24 @@ func (_m *Store) TaskInsert(_a0 *model.Task) error {
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*model.Task) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// TaskInsertAtOnce provides a mock function with given fields: _a0
+func (_m *Store) TaskInsertAtOnce(_a0 []*model.Task) error {
+	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for TaskInsertAtOnce")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]*model.Task) error); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
