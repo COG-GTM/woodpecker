@@ -384,15 +384,18 @@ func TestFullPod(t *testing.T) {
 			Password: "bar",
 		},
 	}, &config{
-		Namespace:                   "woodpecker",
-		ImagePullSecretNames:        []string{"regcred", "another-pull-secret"},
-		PodLabels:                   map[string]string{"app": "test"},
-		PodLabelsAllowFromStep:      true,
-		PodAnnotations:              map[string]string{"apps.kubernetes.io/pod-index": "0"},
-		PodAnnotationsAllowFromStep: true,
-		PodTolerationsAllowFromStep: true,
-		PodNodeSelector:             map[string]string{"topology.kubernetes.io/region": "eu-central-1"},
-		SecurityContext:             SecurityContextConfig{RunAsNonRoot: false},
+		Namespace:                      "woodpecker",
+		ImagePullSecretNames:           []string{"regcred", "another-pull-secret"},
+		PodLabels:                      map[string]string{"app": "test"},
+		PodLabelsAllowFromStep:         true,
+		PodAnnotations:                 map[string]string{"apps.kubernetes.io/pod-index": "0"},
+		PodAnnotationsAllowFromStep:    true,
+		PodServiceAccountAllowFromStep: true,
+		PodRuntimeClassAllowFromStep:   true,
+		PodNodeSelectorAllowFromStep:   true,
+		PodTolerationsAllowFromStep:    true,
+		PodNodeSelector:                map[string]string{"topology.kubernetes.io/region": "eu-central-1"},
+		SecurityContext:                SecurityContextConfig{RunAsNonRoot: false},
 	}, "wp-01he8bebctabr3kgk0qj36d2me-0", "linux/amd64", BackendOptions{
 		Labels:             map[string]string{"part-of": "woodpecker-ci"},
 		Annotations:        map[string]string{"kubernetes.io/limit-ranger": "LimitRanger plugin set: cpu, memory request and limit for container"},
@@ -724,6 +727,25 @@ func TestPodTolerations(t *testing.T) {
 
 	ja := jsonassert.New(t)
 	ja.Assertf(string(podJSON), expected)
+}
+
+func TestPodSensitiveBackendOptionsDisallowed(t *testing.T) {
+	runtimeClass := "kata"
+	pod, err := mkPod(&types.Step{
+		Name:  "sensitive-options-test",
+		Image: "alpine",
+		UUID:  "01he8bebctabr3kgk0qj36d2me-0",
+	}, &config{
+		Namespace: "woodpecker",
+	}, "wp-01he8bebctabr3kgk0qj36d2me-0", "linux/amd64", BackendOptions{
+		ServiceAccountName: "admin",
+		RuntimeClassName:   &runtimeClass,
+		NodeSelector:       map[string]string{"sensitive": "true"},
+	})
+	assert.NoError(t, err)
+	assert.Empty(t, pod.Spec.ServiceAccountName)
+	assert.Nil(t, pod.Spec.RuntimeClassName)
+	assert.NotContains(t, pod.Spec.NodeSelector, "sensitive")
 }
 
 func TestPodTolerationsAllowFromStep(t *testing.T) {

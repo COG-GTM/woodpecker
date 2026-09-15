@@ -169,15 +169,32 @@ func podAnnotations(config *config, options BackendOptions) map[string]string {
 
 func podSpec(step *types.Step, config *config, options BackendOptions, nsp nativeSecretsProcessor) (v1.PodSpec, error) {
 	var err error
+	backendNodeSelector := options.NodeSelector
+	if !config.PodNodeSelectorAllowFromStep {
+		if len(backendNodeSelector) > 0 {
+			log.Debug().Msg("Pod node selector was defined in backend options, but its using disallowed by instance configuration")
+		}
+		backendNodeSelector = nil
+	}
+
 	spec := v1.PodSpec{
-		RestartPolicy:      v1.RestartPolicyNever,
-		RuntimeClassName:   options.RuntimeClassName,
-		ServiceAccountName: options.ServiceAccountName,
-		PriorityClassName:  config.PriorityClassName,
-		HostAliases:        hostAliases(step.ExtraHosts),
-		NodeSelector:       nodeSelector(options.NodeSelector, config.PodNodeSelector, step.Environment["CI_SYSTEM_PLATFORM"]),
-		Tolerations:        tolerations(options.Tolerations),
-		SecurityContext:    podSecurityContext(options.SecurityContext, config.SecurityContext, step.Privileged),
+		RestartPolicy:     v1.RestartPolicyNever,
+		PriorityClassName: config.PriorityClassName,
+		HostAliases:       hostAliases(step.ExtraHosts),
+		NodeSelector:      nodeSelector(backendNodeSelector, config.PodNodeSelector, step.Environment["CI_SYSTEM_PLATFORM"]),
+		Tolerations:       tolerations(options.Tolerations),
+		SecurityContext:   podSecurityContext(options.SecurityContext, config.SecurityContext, step.Privileged),
+	}
+
+	if config.PodRuntimeClassAllowFromStep {
+		spec.RuntimeClassName = options.RuntimeClassName
+	} else if options.RuntimeClassName != nil && len(*options.RuntimeClassName) > 0 {
+		log.Debug().Msg("Pod runtime class was defined in backend options, but its using disallowed by instance configuration")
+	}
+	if config.PodServiceAccountAllowFromStep {
+		spec.ServiceAccountName = options.ServiceAccountName
+	} else if len(options.ServiceAccountName) > 0 {
+		log.Debug().Msg("Pod service account was defined in backend options, but its using disallowed by instance configuration")
 	}
 
 	// If there are tolerations and they are allowed

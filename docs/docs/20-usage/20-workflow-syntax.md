@@ -516,7 +516,7 @@ Using `directory`, you can set a subdirectory of your repository or an absolute 
 
 ### `backend_options`
 
-With `backend_options` you can define options that are specific to the respective backend that is used to execute the steps. For example, you can specify the user and/or group used in a Docker container or you can specify the service account for Kubernetes.
+With `backend_options` you can define options that are specific to the respective backend that is used to execute the steps. For example, you can specify the user and/or group used in a Docker container or you can specify the service account for Kubernetes. Kubernetes `serviceAccountName`, `runtimeClassName`, and `nodeSelector` options require a trusted repository with security enabled and the corresponding operator allow flag.
 
 Further details can be found in the documentation of the used backend:
 

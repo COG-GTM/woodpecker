@@ -152,6 +152,9 @@ func (l *Linter) lintContainers(config *WorkflowConfig, area string) error {
 		if err := l.lintTrusted(config, container, area); err != nil {
 			linterErr = multierr.Append(linterErr, err)
 		}
+		if err := l.lintBackendOptions(config, container, area); err != nil {
+			linterErr = multierr.Append(linterErr, err)
+		}
 		if err := l.lintSettings(config, container, area); err != nil {
 			linterErr = multierr.Append(linterErr, err)
 		}
@@ -167,6 +170,55 @@ func (l *Linter) lintContainers(config *WorkflowConfig, area string) error {
 	}
 
 	return linterErr
+}
+
+func (l *Linter) lintBackendOptions(config *WorkflowConfig, c *types.Container, area string) error {
+	kubernetesOptions, ok := toStringMap(c.BackendOptions["kubernetes"])
+	if !ok || l.trusted.Security {
+		return nil
+	}
+
+	var linterErr error
+	field := fmt.Sprintf("%s.%s.backend_options.kubernetes", area, c.Name)
+	appendError := func(option string) {
+		linterErr = multierr.Append(linterErr, newLinterError(
+			fmt.Sprintf("Insufficient trust level to use `backend_options.kubernetes.%s`", option),
+			config.File,
+			field,
+			false,
+		))
+	}
+
+	for _, option := range []string{"serviceAccountName", "runtimeClassName", "nodeSelector"} {
+		if _, ok := kubernetesOptions[option]; ok {
+			appendError(option)
+		}
+	}
+
+	if securityContext, ok := toStringMap(kubernetesOptions["securityContext"]); ok {
+		for _, option := range []string{"privileged", "seccompProfile", "apparmorProfile"} {
+			if _, ok := securityContext[option]; ok {
+				appendError("securityContext." + option)
+			}
+		}
+	}
+
+	return linterErr
+}
+
+func toStringMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case map[string]any:
+		return m, true
+	case map[any]any:
+		result := make(map[string]any, len(m))
+		for key, value := range m {
+			result[fmt.Sprint(key)] = value
+		}
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 func (l *Linter) lintDependsOn(config *WorkflowConfig, c *types.Container, area string) error {
