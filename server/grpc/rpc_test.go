@@ -52,10 +52,10 @@ func TestRegisterAgent(t *testing.T) {
 		grpc := RPC{
 			store: store,
 		}
-		ctx := metadata.NewIncomingContext(
+		ctx := withAgentID(metadata.NewIncomingContext(
 			t.Context(),
-			metadata.Pairs("hostname", "hostname", "agent_id", "1337"),
-		)
+			metadata.Pairs("hostname", "hostname"),
+		), 1337)
 		agentID, err := grpc.RegisterAgent(ctx, rpc.AgentInfo{
 			Version:  "version",
 			Platform: "platform",
@@ -94,10 +94,10 @@ func TestRegisterAgent(t *testing.T) {
 		grpc := RPC{
 			store: store,
 		}
-		ctx := metadata.NewIncomingContext(
+		ctx := withAgentID(metadata.NewIncomingContext(
 			t.Context(),
-			metadata.Pairs("hostname", "newHostname", "agent_id", "1337"),
-		)
+			metadata.Pairs("hostname", "newHostname"),
+		), 1337)
 		agentID, err := grpc.RegisterAgent(ctx, rpc.AgentInfo{
 			Version:  "version",
 			Platform: "platform",
