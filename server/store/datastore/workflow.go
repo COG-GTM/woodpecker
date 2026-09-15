@@ -27,10 +27,20 @@ func (s storage) WorkflowGetTree(pipeline *model.Pipeline) ([]*model.Workflow, e
 		return nil, err
 	}
 
+	steps := make([]*model.Step, 0)
+	if err := sess.Where("pipeline_id = ?", pipeline.ID).OrderBy("pid").Find(&steps); err != nil {
+		return nil, err
+	}
+
+	stepsByPPID := make(map[int][]*model.Step, len(wfList))
+	for _, step := range steps {
+		stepsByPPID[step.PPID] = append(stepsByPPID[step.PPID], step)
+	}
+
 	for _, wf := range wfList {
-		wf.Children, err = s.stepListWorkflow(sess, wf)
-		if err != nil {
-			return nil, err
+		wf.Children = stepsByPPID[wf.PID]
+		if wf.Children == nil {
+			wf.Children = make([]*model.Step, 0)
 		}
 	}
 
