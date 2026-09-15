@@ -30,6 +30,7 @@ import (
 	"github.com/rs/zerolog/log"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/errgroup"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server"
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge"
@@ -41,8 +42,9 @@ import (
 )
 
 const (
-	defaultScope = "api"
-	perPage      = 100
+	defaultScope           = "api"
+	perPage                = 100
+	maxParallelFileFetches = 10
 )
 
 // Opts defines configuration options.
@@ -374,7 +376,11 @@ func (g *GitLab) File(ctx context.Context, user *model.User, repo *model.Repo, p
 	if err != nil {
 		return nil, err
 	}
-	file, resp, err := client.RepositoryFiles.GetRawFile(_repo.ID, fileName, &gitlab.GetRawFileOptions{Ref: &pipeline.Commit}, gitlab.WithContext(ctx))
+	return g.getFile(ctx, client, _repo.ID, pipeline.Commit, fileName)
+}
+
+func (g *GitLab) getFile(ctx context.Context, client *gitlab.Client, projectID int, ref, fileName string) ([]byte, error) {
+	file, resp, err := client.RepositoryFiles.GetRawFile(projectID, fileName, &gitlab.GetRawFileOptions{Ref: &ref}, gitlab.WithContext(ctx))
 	if resp != nil && resp.StatusCode == http.StatusNotFound {
 		return nil, errors.Join(err, &forge_types.ErrConfigNotFound{Configs: []string{fileName}})
 	}
@@ -402,28 +408,42 @@ func (g *GitLab) Dir(ctx context.Context, user *model.User, repo *model.Repo, pi
 	}
 
 	for i := 1; true; i++ {
-		opts.Page = 1
+		opts.Page = i
 		batch, _, err := client.Repositories.ListTree(_repo.ID, opts, gitlab.WithContext(ctx))
 		if err != nil {
 			return nil, err
 		}
 
-		for i := range batch {
-			if batch[i].Type != "blob" { // no file
-				continue
+		blobs := make([]int, 0, len(batch))
+		for j := range batch {
+			if batch[j].Type == "blob" {
+				blobs = append(blobs, j)
 			}
-			data, err := g.File(ctx, user, repo, pipeline, batch[i].Path)
-			if err != nil {
-				if errors.Is(err, &forge_types.ErrConfigNotFound{}) {
-					return nil, fmt.Errorf("git tree reported existence of file but we got: %s", err.Error())
+		}
+
+		pageFiles := make([]*forge_types.FileMeta, len(blobs))
+		eg, ctx := errgroup.WithContext(ctx)
+		eg.SetLimit(maxParallelFileFetches)
+		for j, blobIdx := range blobs {
+			eg.Go(func() error {
+				data, err := g.getFile(ctx, client, _repo.ID, pipeline.Commit, batch[blobIdx].Path)
+				if err != nil {
+					if errors.Is(err, &forge_types.ErrConfigNotFound{}) {
+						return fmt.Errorf("git tree reported existence of file but we got: %s", err.Error())
+					}
+					return err
 				}
-				return nil, err
-			}
-			files = append(files, &forge_types.FileMeta{
-				Name: batch[i].Path,
-				Data: data,
+				pageFiles[j] = &forge_types.FileMeta{
+					Name: batch[blobIdx].Path,
+					Data: data,
+				}
+				return nil
 			})
 		}
+		if err := eg.Wait(); err != nil {
+			return nil, err
+		}
+		files = append(files, pageFiles...)
 
 		if len(batch) < perPage {
 			break
