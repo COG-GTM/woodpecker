@@ -29,6 +29,7 @@ import (
 	"code.gitea.io/sdk/gitea"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/errgroup"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server"
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge"
@@ -44,6 +45,7 @@ const (
 	accessTokenURL    = "%s/login/oauth/access_token"
 	defaultPageSize   = 50
 	giteaDevVersion   = "v1.21.0"
+	maxDirFileFetches = 4
 )
 
 type Gitea struct {
@@ -280,8 +282,6 @@ func (c *Gitea) File(ctx context.Context, u *model.User, r *model.Repo, b *model
 }
 
 func (c *Gitea) Dir(ctx context.Context, u *model.User, r *model.Repo, b *model.Pipeline, f string) ([]*forge_types.FileMeta, error) {
-	var configs []*forge_types.FileMeta
-
 	client, err := c.newClientToken(ctx, u.AccessToken)
 	if err != nil {
 		return nil, err
@@ -293,18 +293,35 @@ func (c *Gitea) Dir(ctx context.Context, u *model.User, r *model.Repo, b *model.
 		return nil, err
 	}
 
+	var files []*gitea.ContentsResponse
 	for _, e := range contents {
 		if e.Type == "file" {
-			data, err := c.File(ctx, u, r, b, e.Path)
-			if err != nil {
-				return nil, fmt.Errorf("multi-pipeline cannot get %s: %w", e.Path, err)
-			}
+			files = append(files, e)
+		}
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
 
-			configs = append(configs, &forge_types.FileMeta{
+	// Fetch files concurrently; results are stored by index to keep listing order.
+	configs := make([]*forge_types.FileMeta, len(files))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxDirFileFetches)
+	for i, e := range files {
+		g.Go(func() error {
+			data, err := c.File(gctx, u, r, b, e.Path)
+			if err != nil {
+				return fmt.Errorf("multi-pipeline cannot get %s: %w", e.Path, err)
+			}
+			configs[i] = &forge_types.FileMeta{
 				Name: e.Path,
 				Data: data,
-			})
-		}
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return configs, nil
