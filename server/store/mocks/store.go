@@ -2532,6 +2532,24 @@ func (_m *Store) StepUpdate(_a0 *model.Step) error {
 	return r0
 }
 
+// StepsUpdateState provides a mock function with given fields: ids, state, finished
+func (_m *Store) StepsUpdateState(ids []int64, state model.StatusValue, finished int64) error {
+	ret := _m.Called(ids, state, finished)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StepsUpdateState")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]int64, model.StatusValue, int64) error); ok {
+		r0 = rf(ids, state, finished)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // TaskDelete provides a mock function with given fields: _a0
 func (_m *Store) TaskDelete(_a0 string) error {
 	ret := _m.Called(_a0)
@@ -2789,6 +2807,24 @@ func (_m *Store) WorkflowsReplace(_a0 *model.Pipeline, _a1 []*model.Workflow) er
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*model.Pipeline, []*model.Workflow) error); ok {
 		r0 = rf(_a0, _a1)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// WorkflowsUpdateState provides a mock function with given fields: ids, state
+func (_m *Store) WorkflowsUpdateState(ids []int64, state model.StatusValue) error {
+	ret := _m.Called(ids, state)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WorkflowsUpdateState")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]int64, model.StatusValue) error); ok {
+		r0 = rf(ids, state)
 	} else {
 		r0 = ret.Error(0)
 	}
