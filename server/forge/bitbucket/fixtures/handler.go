@@ -215,6 +215,7 @@ const tokenNotFoundPayload = `
 
 const repoPayload = `
 {
+  "uuid": "{6a8b2c1d-1111-4e2f-9a3b-5c6d7e8f9a0b}",
   "full_name": "test_name/repo_name",
   "scm": "git",
   "is_private": true
@@ -503,6 +504,7 @@ const permissionsPayLoad = `
   "values": [
     {
       "repository": {
+        "uuid": "{6a8b2c1d-1111-4e2f-9a3b-5c6d7e8f9a0b}",
         "full_name": "test_name/repo_name"
       },
       "permission": "read"
