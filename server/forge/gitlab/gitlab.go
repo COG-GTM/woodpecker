@@ -284,6 +284,24 @@ func (g *GitLab) Repo(ctx context.Context, user *model.User, remoteID model.Forg
 	return g.convertGitLabRepo(_repo, projectMember)
 }
 
+// projectMemberFromPermissions derives the user's effective access level from the
+// permissions embedded in a project listing, or returns nil if none are present.
+func projectMemberFromPermissions(perms *gitlab.Permissions) *gitlab.ProjectMember {
+	if perms == nil || (perms.ProjectAccess == nil && perms.GroupAccess == nil) {
+		return nil
+	}
+
+	var level gitlab.AccessLevelValue
+	if perms.ProjectAccess != nil {
+		level = perms.ProjectAccess.AccessLevel
+	}
+	if perms.GroupAccess != nil && perms.GroupAccess.AccessLevel > level {
+		level = perms.GroupAccess.AccessLevel
+	}
+
+	return &gitlab.ProjectMember{AccessLevel: level}
+}
+
 // Repos fetches a list of repos from the forge.
 func (g *GitLab) Repos(ctx context.Context, user *model.User) ([]*model.Repo, error) {
 	client, err := newClient(g.url, user.AccessToken, g.skipVerify)
@@ -312,9 +330,12 @@ func (g *GitLab) Repos(ctx context.Context, user *model.User) ([]*model.Repo, er
 		}
 
 		for i := range batch {
-			projectMember, _, err := client.ProjectMembers.GetInheritedProjectMember(batch[i].ID, intUserID, gitlab.WithContext(ctx))
-			if err != nil {
-				return nil, err
+			projectMember := projectMemberFromPermissions(batch[i].Permissions)
+			if projectMember == nil {
+				projectMember, _, err = client.ProjectMembers.GetInheritedProjectMember(batch[i].ID, intUserID, gitlab.WithContext(ctx))
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			repo, err := g.convertGitLabRepo(batch[i], projectMember)
