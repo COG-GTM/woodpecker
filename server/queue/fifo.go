@@ -307,12 +307,13 @@ func (q *fifo) filterWaiting() {
 
 	// rebuild waitingDeps
 	q.waitingOnDeps = list.New()
+	inQueue := q.taskIDsInQueue()
 	var filtered []*list.Element
 	var nextPending *list.Element
 	for element := q.pending.Front(); element != nil; element = nextPending {
 		nextPending = element.Next()
 		task, _ := element.Value.(*model.Task)
-		if q.depsInQueue(task) {
+		if depsInQueue(task, inQueue) {
 			log.Debug().Msgf("queue: waiting due to unmet dependencies %v", task.ID)
 			q.waitingOnDeps.PushBack(task)
 			filtered = append(filtered, element)
@@ -361,24 +362,24 @@ func (q *fifo) resubmitExpiredPipelines() {
 	}
 }
 
-func (q *fifo) depsInQueue(task *model.Task) bool {
-	var next *list.Element
-	for element := q.pending.Front(); element != nil; element = next {
-		next = element.Next()
-		possibleDep, ok := element.Value.(*model.Task)
-		log.Debug().Msgf("queue: pending right now: %v", possibleDep.ID)
-		for _, dep := range task.Dependencies {
-			if ok && possibleDep.ID == dep {
-				return true
-			}
+// taskIDsInQueue returns the ids of all tasks currently pending or running.
+func (q *fifo) taskIDsInQueue() map[string]struct{} {
+	ids := make(map[string]struct{}, q.pending.Len()+len(q.running))
+	for element := q.pending.Front(); element != nil; element = element.Next() {
+		if task, ok := element.Value.(*model.Task); ok {
+			ids[task.ID] = struct{}{}
 		}
 	}
-	for possibleDepID := range q.running {
-		log.Debug().Msgf("queue: running right now: %v", possibleDepID)
-		for _, dep := range task.Dependencies {
-			if possibleDepID == dep {
-				return true
-			}
+	for id := range q.running {
+		ids[id] = struct{}{}
+	}
+	return ids
+}
+
+func depsInQueue(task *model.Task, inQueue map[string]struct{}) bool {
+	for _, dep := range task.Dependencies {
+		if _, ok := inQueue[dep]; ok {
+			return true
 		}
 	}
 	return false
