@@ -145,6 +145,58 @@ func TestStepUpdate(t *testing.T) {
 	assert.Equal(t, model.StatusRunning, updated.State)
 }
 
+func TestStepsUpdateState(t *testing.T) {
+	store, closer := newTestStore(t, new(model.Step), new(model.Pipeline))
+	defer closer()
+
+	steps := []*model.Step{
+		{
+			UUID:       "8d89104f-d44e-4b45-b86e-17f8b5e74a0e",
+			PipelineID: 1,
+			PID:        1,
+			PPID:       1,
+			State:      model.StatusPending,
+			Finished:   42,
+		},
+		{
+			UUID:       "2bf387f7-2913-4907-814c-c9ada88707c0",
+			PipelineID: 1,
+			PID:        2,
+			PPID:       1,
+			State:      model.StatusPending,
+			Finished:   43,
+		},
+		{
+			UUID:       "40aab045-970b-4892-b6df-6f825a7ec97a",
+			PipelineID: 1,
+			PID:        3,
+			PPID:       1,
+			State:      model.StatusPending,
+			Finished:   44,
+		},
+	}
+	sess := store.engine.NewSession()
+	assert.NoError(t, store.stepCreate(sess, steps))
+	assert.NoError(t, sess.Commit())
+
+	// empty ids is a no-op
+	assert.NoError(t, store.StepsUpdateState(nil, model.StatusSkipped, 0))
+
+	// bulk update the first two; finished=0 must be written even though it is the zero value
+	assert.NoError(t, store.StepsUpdateState([]int64{steps[0].ID, steps[1].ID}, model.StatusSkipped, 0))
+
+	for i, wantFinished := range []int64{0, 0, 44} {
+		step, err := store.StepLoad(steps[i].ID)
+		assert.NoError(t, err)
+		if i < 2 {
+			assert.Equal(t, model.StatusSkipped, step.State)
+		} else {
+			assert.Equal(t, model.StatusPending, step.State)
+		}
+		assert.Equal(t, wantFinished, step.Finished)
+	}
+}
+
 func TestStepIndexes(t *testing.T) {
 	store, closer := newTestStore(t, new(model.Step), new(model.Pipeline))
 	defer closer()

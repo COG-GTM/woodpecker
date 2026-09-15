@@ -83,6 +83,14 @@ func (s storage) StepUpdate(step *model.Step) error {
 	return err
 }
 
+func (s storage) StepsUpdateState(ids []int64, state model.StatusValue, finished int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.engine.In("id", ids).Cols("state", "finished").Update(&model.Step{State: state, Finished: finished})
+	return err
+}
+
 func deleteStep(sess *xorm.Session, stepID int64) error {
 	if err := logDelete(sess, stepID); err != nil {
 		return err

@@ -118,3 +118,26 @@ func TestWorkflowUpdate(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, model.StatusValue("success"), workflowGet.State)
 }
+
+func TestWorkflowsUpdateState(t *testing.T) {
+	store, closer := newTestStore(t, new(model.Step), new(model.Pipeline), new(model.Workflow))
+	defer closer()
+
+	wfs := []*model.Workflow{
+		{PipelineID: 1, PID: 1, Name: "wf1", State: model.StatusPending},
+		{PipelineID: 1, PID: 2, Name: "wf2", State: model.StatusPending},
+		{PipelineID: 1, PID: 3, Name: "wf3", State: model.StatusPending},
+	}
+	assert.NoError(t, store.WorkflowsCreate(wfs))
+
+	// empty ids is a no-op
+	assert.NoError(t, store.WorkflowsUpdateState(nil, model.StatusSkipped))
+
+	assert.NoError(t, store.WorkflowsUpdateState([]int64{wfs[0].ID, wfs[1].ID}, model.StatusSkipped))
+
+	for i, want := range []model.StatusValue{model.StatusSkipped, model.StatusSkipped, model.StatusPending} {
+		workflowGet, err := store.WorkflowLoad(wfs[i].ID)
+		assert.NoError(t, err)
+		assert.Equal(t, want, workflowGet.State)
+	}
+}

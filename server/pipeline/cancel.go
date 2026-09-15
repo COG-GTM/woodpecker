@@ -68,19 +68,39 @@ func Cancel(ctx context.Context, _forge forge.Forge, store store.Store, repo *mo
 
 	// Then update the DB status for pending pipelines
 	// Running ones will be set when the agents stop on the cancel signal
+	var (
+		pendingWorkflowIDs []int64
+		skippedStepIDs     []int64
+		finishedStepIDs    []int64
+	)
 	for _, workflow := range workflows {
 		if workflow.State == model.StatusPending {
-			if _, err = UpdateWorkflowToStatusSkipped(store, *workflow); err != nil {
-				log.Error().Err(err).Msgf("cannot update workflow with id %d state", workflow.ID)
-			}
+			pendingWorkflowIDs = append(pendingWorkflowIDs, workflow.ID)
+			workflow.State = model.StatusSkipped
 		}
 		for _, step := range workflow.Children {
 			if step.State == model.StatusPending {
-				if _, err = UpdateStepToStatusSkipped(store, *step, 0); err != nil {
-					log.Error().Err(err).Msgf("cannot update workflow with id %d state", workflow.ID)
+				if step.Started != 0 {
+					// for daemons that are killed
+					finishedStepIDs = append(finishedStepIDs, step.ID)
+					step.State = model.StatusSuccess
+					step.Finished = 0
+				} else {
+					skippedStepIDs = append(skippedStepIDs, step.ID)
+					step.State = model.StatusSkipped
 				}
 			}
 		}
+	}
+
+	if err = store.WorkflowsUpdateState(pendingWorkflowIDs, model.StatusSkipped); err != nil {
+		log.Error().Err(err).Msgf("cannot update state of workflows %v", pendingWorkflowIDs)
+	}
+	if err = store.StepsUpdateState(skippedStepIDs, model.StatusSkipped, 0); err != nil {
+		log.Error().Err(err).Msgf("cannot update state of steps %v", skippedStepIDs)
+	}
+	if err = store.StepsUpdateState(finishedStepIDs, model.StatusSuccess, 0); err != nil {
+		log.Error().Err(err).Msgf("cannot update state of steps %v", finishedStepIDs)
 	}
 
 	killedPipeline, err := UpdateToStatusKilled(store, *pipeline)
@@ -91,9 +111,7 @@ func Cancel(ctx context.Context, _forge forge.Forge, store store.Store, repo *mo
 
 	updatePipelineStatus(ctx, _forge, killedPipeline, repo, user)
 
-	if killedPipeline.Workflows, err = store.WorkflowGetTree(killedPipeline); err != nil {
-		return err
-	}
+	killedPipeline.Workflows = workflows
 	publishToTopic(killedPipeline, repo)
 
 	return nil

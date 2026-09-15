@@ -131,3 +131,11 @@ func (s storage) WorkflowUpdate(workflow *model.Workflow) error {
 	_, err := s.engine.ID(workflow.ID).AllCols().Update(workflow)
 	return err
 }
+
+func (s storage) WorkflowsUpdateState(ids []int64, state model.StatusValue) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.engine.In("id", ids).Cols("state").Update(&model.Workflow{State: state})
+	return err
+}

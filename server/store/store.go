@@ -143,6 +143,7 @@ type Store interface {
 	StepChild(*model.Pipeline, int, string) (*model.Step, error)
 	StepList(*model.Pipeline) ([]*model.Step, error)
 	StepUpdate(*model.Step) error
+	StepsUpdateState(ids []int64, state model.StatusValue, finished int64) error
 	StepListFromWorkflowFind(*model.Workflow) ([]*model.Step, error)
 
 	// Logs
@@ -192,6 +193,7 @@ type Store interface {
 	WorkflowsReplace(*model.Pipeline, []*model.Workflow) error
 	WorkflowLoad(int64) (*model.Workflow, error)
 	WorkflowUpdate(*model.Workflow) error
+	WorkflowsUpdateState(ids []int64, state model.StatusValue) error
 
 	// Org
 	OrgCreate(*model.Org) error
