@@ -59,10 +59,14 @@ You can use [Limit Ranges](https://kubernetes.io/docs/concepts/policy/limit-rang
 `runtimeClassName` specifies the name of the RuntimeClass which will be used to run this Pod. If no `runtimeClassName` is specified, the default RuntimeHandler will be used.
 See the [Kubernetes documentation](https://kubernetes.io/docs/concepts/containers/runtime-class/) for more information on specifying runtime classes.
 
+Using `runtimeClassName` from a step requires a trusted repository with security enabled and the `WOODPECKER_BACKEND_K8S_POD_RUNTIME_CLASS_ALLOW_FROM_STEP` operator flag.
+
 ### Service account
 
 `serviceAccountName` specifies the name of the ServiceAccount which the Pod will mount. This service account must be created externally.
 See the [Kubernetes documentation](https://kubernetes.io/docs/concepts/security/service-accounts/) for more information on using service accounts.
+
+Using `serviceAccountName` from a step requires a trusted repository with security enabled and the `WOODPECKER_BACKEND_K8S_POD_SERVICE_ACCOUNT_ALLOW_FROM_STEP` operator flag.
 
 ```yaml
 steps:
@@ -82,6 +86,8 @@ To give steps access to the Kubernetes API via service account, take a look at [
 ### Node selector
 
 `nodeSelector` specifies the labels which are used to select the node on which the step will be executed.
+
+Using `nodeSelector` from a step requires a trusted repository with security enabled and the `WOODPECKER_BACKEND_K8S_POD_NODE_SELECTOR_ALLOW_FROM_STEP` operator flag.
 
 Labels defined here will be appended to a list which already contains `"kubernetes.io/arch"`.
 By default `"kubernetes.io/arch"` is inferred from the agents' platform. One can override it by setting that label in the `nodeSelector` section of the `backend_options`.
@@ -404,6 +410,33 @@ Additional tolerations to apply to worker Pods. Must be a YAML object, e.g. `[{"
 - Default: `true`
 
 Determines if Pod tolerations can be defined from a step's backend options.
+
+---
+
+### BACKEND_K8S_POD_SERVICE_ACCOUNT_ALLOW_FROM_STEP
+
+- Name: `WOODPECKER_BACKEND_K8S_POD_SERVICE_ACCOUNT_ALLOW_FROM_STEP`
+- Default: `false`
+
+Determines if a Pod service account can be defined from a step's backend options.
+
+---
+
+### BACKEND_K8S_POD_RUNTIME_CLASS_ALLOW_FROM_STEP
+
+- Name: `WOODPECKER_BACKEND_K8S_POD_RUNTIME_CLASS_ALLOW_FROM_STEP`
+- Default: `false`
+
+Determines if a Pod runtime class can be defined from a step's backend options.
+
+---
+
+### BACKEND_K8S_POD_NODE_SELECTOR_ALLOW_FROM_STEP
+
+- Name: `WOODPECKER_BACKEND_K8S_POD_NODE_SELECTOR_ALLOW_FROM_STEP`
+- Default: `false`
+
+Determines if a Pod node selector can be defined from a step's backend options.
 
 ---
 

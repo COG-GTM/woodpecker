@@ -125,6 +125,10 @@ func TestLintErrors(t *testing.T) {
 			want: "Insufficient trust level to use `privileged` mode",
 		},
 		{
+			from: "steps: { build: { image: golang, backend_options: { kubernetes: { serviceAccountName: admin-sa, nodeSelector: { a: b }, securityContext: { seccompProfile: { type: Unconfined } } } } } }",
+			want: "Insufficient trust level to use `backend_options.kubernetes.serviceAccountName`",
+		},
+		{
 			from: "steps: { build: { image: golang, dns: [ 8.8.8.8 ] }  }",
 			want: "Insufficient trust level to use custom `dns`",
 		},
@@ -211,6 +215,69 @@ func TestLintErrors(t *testing.T) {
 			}
 		}
 		assert.True(t, found, "Expected error %q, got %q", test.want, lerrors)
+	}
+}
+
+func TestLintBackendOptions(t *testing.T) {
+	testdata := []struct {
+		title   string
+		from    string
+		trusted bool
+	}{
+		{
+			title: "trusted sensitive options",
+			from: `
+when:
+  event: push
+steps:
+  build:
+    image: golang
+    backend_options:
+      kubernetes:
+        serviceAccountName: admin-sa
+        nodeSelector:
+          a: b
+        securityContext:
+          seccompProfile:
+            type: Unconfined
+`,
+			trusted: true,
+		},
+		{
+			title: "untrusted harmless options",
+			from: `
+when:
+  event: push
+steps:
+  build:
+    image: golang
+    backend_options:
+      kubernetes:
+        resources:
+          requests:
+            memory: 128Mi
+        tolerations:
+          - key: jobs
+            operator: Exists
+`,
+		},
+	}
+
+	for _, test := range testdata {
+		t.Run(test.title, func(t *testing.T) {
+			conf, err := yaml.ParseString(test.from)
+			assert.NoError(t, err)
+
+			opts := []linter.Option{}
+			if test.trusted {
+				opts = append(opts, linter.WithTrusted(linter.TrustedConfiguration{Security: true}))
+			}
+			assert.NoError(t, linter.New(opts...).Lint([]*linter.WorkflowConfig{{
+				File:      test.title,
+				RawConfig: test.from,
+				Workflow:  conf,
+			}}))
+		})
 	}
 }
 

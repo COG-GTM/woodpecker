@@ -647,9 +647,9 @@
           }
         },
         "tolerations": {
-          "type": "object",
-          "additionalProperties": {
-            "type": ["boolean", "string", "number"]
+          "type": "array",
+          "items": {
+            "type": "object"
           }
         },
         "securityContext": {
