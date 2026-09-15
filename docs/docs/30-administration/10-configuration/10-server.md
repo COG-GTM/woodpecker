@@ -722,9 +722,9 @@ Configures the gRPC listener port.
 ### GRPC_SECRET
 
 - Name: `WOODPECKER_GRPC_SECRET`
-- Default: `secret`
+- Default: none (generated and persisted in the server config store)
 
-Configures the gRPC JWT secret.
+Configures the gRPC JWT secret. When not set, a random secret is generated on first start and stored in the database. The literal value `secret` is rejected.
 
 ---
 
@@ -1078,7 +1078,9 @@ Specify a configuration service endpoint, see [Configuration Extension](#externa
 
 Specify timeout when fetching the Woodpecker configuration from forge. See <https://pkg.go.dev/time#ParseDuration> for syntax reference.
 
-GitHub webhooks must receive a 2xx response within **10 seconds** or the delivery is marked timed out. Raising this value is only safe when [`WOODPECKER_WEBHOOK_SYNC_TIMEOUT`](#webhook_sync_timeout) is **non-zero** (default 5s): Woodpecker acknowledges the webhook quickly (or after the sync wait) and continues forge config fetch in the background. Do **not** set a long forge timeout with `WOODPECKER_WEBHOOK_SYNC_TIMEOUT=0`, or GitHub may time out the delivery. Keep the sync timeout itself under GitHub's ~10s budget (for example do not set it to 15s).
+GitHub webhooks must receive a 2xx response within **10 seconds** or the delivery is marked timed out. Raising this value is only safe when [`WOODPECKER_WEBHOOK_SYNC_TIMEOUT`](#webhook_sync_timeout) is **non-zero** (default 5s):
+Woodpecker acknowledges the webhook quickly (or after the sync wait) and continues forge config fetch in the background. Do **not** set a long forge timeout with `WOODPECKER_WEBHOOK_SYNC_TIMEOUT=0`, or GitHub may time out the delivery.
+Keep the sync timeout itself under GitHub's ~10s budget (for example do not set it to 15s).
 
 For monorepos with many files under `.woodpecker/`, 15–30s is a reasonable forge-timeout range once async webhook ack is in place.
 
