@@ -46,14 +46,6 @@ func setupRegistryService(store store.Store, dockerConfig string) registry.Servi
 }
 
 func setupSecretService(store store.Store) secret.Service {
-	// TODO(1544): fix encrypted store
-	// // encryption
-	// encryptedSecretStore := encryptedStore.NewSecretStore(v)
-	// err := encryption.Encryption(c, v).WithClient(encryptedSecretStore).Build()
-	// if err != nil {
-	// 	log.Fatal().Err(err).Msg("could not create encryption service")
-	// }
-
 	return secret.NewDB(store)
 }
 
