@@ -48,6 +48,8 @@ import (
 const (
 	queueInfoRefreshInterval = 500 * time.Millisecond
 	storeInfoRefreshInterval = 10 * time.Second
+	// Counting the ever-growing pipelines table is a full scan, so refresh it far less often.
+	pipelineCountRefreshInterval = 5 * time.Minute
 )
 
 func setupStore(ctx context.Context, c *cli.Command) (store.Store, error) {
