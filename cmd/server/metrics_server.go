@@ -51,7 +51,7 @@ func startMetricsCollector(ctx context.Context, _store store.Store) {
 	pipelines := prometheus_auto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "woodpecker",
 		Name:      "pipeline_total_count",
-		Help:      "Total number of pipelines.",
+		Help:      "Total number of pipelines. Refreshed every few minutes, as counting the pipelines table is expensive.",
 	})
 	users := prometheus_auto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "woodpecker",
@@ -88,12 +88,10 @@ func startMetricsCollector(ctx context.Context, _store store.Store) {
 		for {
 			repoCount, repoErr := _store.GetRepoCount()
 			userCount, userErr := _store.GetUserCount()
-			pipelineCount, pipelineErr := _store.GetPipelineCount()
-			pipelines.Set(float64(pipelineCount))
 			users.Set(float64(userCount))
 			repos.Set(float64(repoCount))
 
-			if err := errors.Join(repoErr, userErr, pipelineErr); err != nil {
+			if err := errors.Join(repoErr, userErr); err != nil {
 				log.Error().Err(err).Msg("could not update store information for metrics")
 			}
 
@@ -102,6 +100,25 @@ func startMetricsCollector(ctx context.Context, _store store.Store) {
 				log.Info().Msg("store metric collector stopped")
 				return
 			case <-time.After(storeInfoRefreshInterval):
+			}
+		}
+	}()
+	go func() {
+		log.Info().Msg("pipeline count metric collector started")
+
+		for {
+			pipelineCount, err := _store.GetPipelineCount()
+			pipelines.Set(float64(pipelineCount))
+
+			if err != nil {
+				log.Error().Err(err).Msg("could not update pipeline count for metrics")
+			}
+
+			select {
+			case <-ctx.Done():
+				log.Info().Msg("pipeline count metric collector stopped")
+				return
+			case <-time.After(pipelineCountRefreshInterval):
 			}
 		}
 	}()
