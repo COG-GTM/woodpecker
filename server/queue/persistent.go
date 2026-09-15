@@ -56,21 +56,24 @@ func (q *persistentQueue) Push(c context.Context, task *model.Task) error {
 
 // PushAtOnce pushes multiple tasks to the tail of this queue.
 func (q *persistentQueue) PushAtOnce(c context.Context, tasks []*model.Task) error {
-	// TODO: invent store.NewSession who return context including a session and make TaskInsert & TaskDelete use it
-	for _, task := range tasks {
-		if err := q.store.TaskInsert(task); err != nil {
-			return err
-		}
+	if err := q.store.TaskInsertAtOnce(tasks); err != nil {
+		return err
 	}
 	err := q.Queue.PushAtOnce(c, tasks)
 	if err != nil {
-		for _, task := range tasks {
-			if err := q.store.TaskDelete(task.ID); err != nil {
-				return err
-			}
+		if err2 := q.store.TaskDeleteAtOnce(taskIDs(tasks)); err2 != nil {
+			err = errors.Wrapf(err, "delete tasks failed: %v", err2)
 		}
 	}
 	return err
+}
+
+func taskIDs(tasks []*model.Task) []string {
+	ids := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		ids = append(ids, task.ID)
+	}
+	return ids
 }
 
 // Poll retrieves and removes a task head of this queue.
@@ -101,12 +104,7 @@ func (q *persistentQueue) EvictAtOnce(c context.Context, ids []string) error {
 	if err := q.Queue.EvictAtOnce(c, ids); err != nil {
 		return err
 	}
-	for _, id := range ids {
-		if err := q.store.TaskDelete(id); err != nil {
-			return err
-		}
-	}
-	return nil
+	return q.store.TaskDeleteAtOnce(ids)
 }
 
 // Error signals the task is done with an error.
@@ -122,10 +120,5 @@ func (q *persistentQueue) ErrorAtOnce(c context.Context, ids []string, err error
 	if err := q.Queue.ErrorAtOnce(c, ids, err); err != nil {
 		return err
 	}
-	for _, id := range ids {
-		if err := q.store.TaskDelete(id); err != nil {
-			return err
-		}
-	}
-	return nil
+	return q.store.TaskDeleteAtOnce(ids)
 }

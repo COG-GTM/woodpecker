@@ -46,3 +46,52 @@ func TestTaskList(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, list, 0, "Want empty task list after delete")
 }
+
+func TestTaskInsertAndDeleteAtOnce(t *testing.T) {
+	store, closer := newTestStore(t, new(model.Task))
+	defer closer()
+
+	tasks := []*model.Task{
+		{
+			ID:           "task_1",
+			Data:         []byte("foo"),
+			Labels:       map[string]string{"foo": "bar"},
+			Dependencies: []string{"dep_a"},
+		},
+		{
+			ID:           "task_2",
+			Data:         []byte("bar"),
+			Labels:       map[string]string{"baz": "qux"},
+			Dependencies: []string{"dep_b"},
+		},
+		{
+			ID:           "task_3",
+			Data:         []byte("baz"),
+			Labels:       map[string]string{"a": "b"},
+			Dependencies: []string{"dep_c"},
+		},
+	}
+	assert.NoError(t, store.TaskInsertAtOnce(tasks))
+
+	list, err := store.TaskList()
+	assert.NoError(t, err)
+	assert.Len(t, list, 3, "Expected three tasks in list")
+	for i, task := range tasks {
+		assert.Equal(t, task.ID, list[i].ID)
+		assert.EqualValues(t, task.Labels, list[i].Labels)
+		assert.EqualValues(t, task.Dependencies, list[i].Dependencies)
+	}
+
+	assert.NoError(t, store.TaskDeleteAtOnce([]string{"task_1", "task_3"}))
+
+	list, err = store.TaskList()
+	assert.NoError(t, err)
+	assert.Len(t, list, 1, "Want one task left in list")
+	assert.Equal(t, "task_2", list[0].ID)
+
+	// deleting a missing id must not error
+	assert.NoError(t, store.TaskDeleteAtOnce([]string{"task_2", "missing_id"}))
+	// empty slice is a no-op
+	assert.NoError(t, store.TaskDeleteAtOnce([]string{}))
+	assert.NoError(t, store.TaskInsertAtOnce(nil))
+}
