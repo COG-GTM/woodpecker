@@ -16,6 +16,7 @@ package fixtures
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +29,8 @@ func Handler() http.Handler {
 	e := gin.New()
 	e.GET("/api/v1/repos/:owner/:name", getRepo)
 	e.GET("/api/v1/repositories/:id", getRepoByID)
-	e.GET("/api/v1/repos/:owner/:name/raw/:file", getRepoFile)
+	e.GET("/api/v1/repos/:owner/:name/raw/*file", getRepoFile)
+	e.GET("/api/v1/repos/:owner/:name/contents/:dir", listRepoContents)
 	e.POST("/api/v1/repos/:owner/:name/hooks", createRepoHook)
 	e.GET("/api/v1/repos/:owner/:name/hooks", listRepoHooks)
 	e.DELETE("/api/v1/repos/:owner/:name/hooks/:id", deleteRepoHook)
@@ -75,7 +77,7 @@ func createRepoCommitStatus(c *gin.Context) {
 }
 
 func getRepoFile(c *gin.Context) {
-	file := c.Param("file")
+	file := strings.TrimPrefix(c.Param("file"), "/")
 	ref := c.Query("ref")
 
 	if file == "file_not_found" {
@@ -85,6 +87,14 @@ func getRepoFile(c *gin.Context) {
 		c.String(http.StatusOK, repoFilePayload)
 	}
 	c.String(http.StatusNotFound, "")
+}
+
+func listRepoContents(c *gin.Context) {
+	if c.Param("dir") != ".woodpecker" {
+		c.String(http.StatusNotFound, "")
+		return
+	}
+	c.String(http.StatusOK, repoDirPayload)
 }
 
 func createRepoHook(c *gin.Context) {
@@ -171,6 +181,13 @@ const repoPayload = `
 `
 
 const repoFilePayload = `{ platform: linux/amd64 }`
+
+const repoDirPayload = `[
+  { "name": "a.yml", "path": ".woodpecker/a.yml", "type": "file" },
+  { "name": "sub", "path": ".woodpecker/sub", "type": "dir" },
+  { "name": "b.yml", "path": ".woodpecker/b.yml", "type": "file" },
+  { "name": "c.yml", "path": ".woodpecker/c.yml", "type": "file" }
+]`
 
 const userRepoPayload = `
 [

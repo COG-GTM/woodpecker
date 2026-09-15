@@ -27,6 +27,7 @@ import (
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v2"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/errgroup"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server"
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge"
@@ -42,6 +43,7 @@ const (
 	accessTokenURL    = "%s/login/oauth/access_token"
 	defaultPageSize   = 50
 	forgejoDevVersion = "v7.0.2"
+	dirFetchWorkers   = 10
 )
 
 type Forgejo struct {
@@ -270,6 +272,10 @@ func (c *Forgejo) File(ctx context.Context, u *model.User, r *model.Repo, b *mod
 		return nil, err
 	}
 
+	return getFile(client, r, b, f)
+}
+
+func getFile(client *forgejo.Client, r *model.Repo, b *model.Pipeline, f string) ([]byte, error) {
 	cfg, resp, err := client.GetFile(r.Owner, r.Name, b.Commit, f)
 	if err != nil && resp != nil && resp.StatusCode == http.StatusNotFound {
 		return nil, errors.Join(err, &forge_types.ErrConfigNotFound{Configs: []string{f}})
@@ -278,8 +284,6 @@ func (c *Forgejo) File(ctx context.Context, u *model.User, r *model.Repo, b *mod
 }
 
 func (c *Forgejo) Dir(ctx context.Context, u *model.User, r *model.Repo, b *model.Pipeline, f string) ([]*forge_types.FileMeta, error) {
-	var configs []*forge_types.FileMeta
-
 	client, err := c.newClientToken(ctx, u.AccessToken)
 	if err != nil {
 		return nil, err
@@ -291,18 +295,34 @@ func (c *Forgejo) Dir(ctx context.Context, u *model.User, r *model.Repo, b *mode
 		return nil, err
 	}
 
+	files := make([]*forgejo.ContentsResponse, 0, len(contents))
 	for _, e := range contents {
 		if e.Type == "file" {
-			data, err := c.File(ctx, u, r, b, e.Path)
-			if err != nil {
-				return nil, fmt.Errorf("multi-pipeline cannot get %s: %w", e.Path, err)
-			}
+			files = append(files, e)
+		}
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
 
-			configs = append(configs, &forge_types.FileMeta{
+	configs := make([]*forge_types.FileMeta, len(files))
+	g, _ := errgroup.WithContext(ctx)
+	g.SetLimit(dirFetchWorkers)
+	for i, e := range files {
+		g.Go(func() error {
+			data, err := getFile(client, r, b, e.Path)
+			if err != nil {
+				return fmt.Errorf("multi-pipeline cannot get %s: %w", e.Path, err)
+			}
+			configs[i] = &forge_types.FileMeta{
 				Name: e.Path,
 				Data: data,
-			})
-		}
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return configs, nil

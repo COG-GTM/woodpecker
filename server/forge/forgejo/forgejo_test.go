@@ -114,6 +114,21 @@ func Test_forgejo(t *testing.T) {
 		assert.Equal(t, "{ platform: linux/amd64 }", string(raw))
 	})
 
+	t.Run("repository dir", func(t *testing.T) {
+		files, err := c.Dir(ctx, fakeUser, fakeRepo, fakePipeline, ".woodpecker")
+		assert.NoError(t, err)
+		assert.Len(t, files, 3)
+		assert.Equal(t, ".woodpecker/a.yml", files[0].Name)
+		assert.Equal(t, ".woodpecker/b.yml", files[1].Name)
+		assert.Equal(t, ".woodpecker/c.yml", files[2].Name)
+		for _, f := range files {
+			assert.Equal(t, "{ platform: linux/amd64 }", string(f.Data))
+		}
+
+		_, err = c.Dir(ctx, fakeUser, fakeRepo, fakePipeline, "dir_not_found")
+		assert.Error(t, err)
+	})
+
 	t.Run("pipeline status", func(t *testing.T) {
 		err := c.Status(ctx, fakeUser, fakeRepo, fakePipeline, fakeWorkflow)
 		assert.NoError(t, err)
