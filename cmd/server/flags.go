@@ -529,29 +529,6 @@ var flags = append([]cli.Flag{
 		Name:    "server-webhook-host",
 		Usage:   "fully qualified woodpecker server url, called by the webhooks of the forge. Format: <scheme>://<host>[/<prefix path>]",
 	},
-	//
-	// secrets encryption in DB
-	//
-	&cli.StringFlag{
-		Sources: cli.NewValueSourceChain(
-			cli.File(os.Getenv("WOODPECKER_ENCRYPTION_KEY_FILE")),
-			cli.EnvVar("WOODPECKER_ENCRYPTION_KEY")),
-		Name:  "encryption-raw-key",
-		Usage: "Raw encryption key",
-		Config: cli.StringConfig{
-			TrimSpace: true,
-		},
-	},
-	&cli.StringFlag{
-		Sources: cli.EnvVars("WOODPECKER_ENCRYPTION_TINK_KEYSET_FILE"),
-		Name:    "encryption-tink-keyset",
-		Usage:   "Google tink AEAD-compatible keyset file to encrypt secrets in DB",
-	},
-	&cli.BoolFlag{
-		Sources: cli.EnvVars("WOODPECKER_ENCRYPTION_DISABLE"),
-		Name:    "encryption-disable-flag",
-		Usage:   "Flag to decrypt all encrypted data and disable encryption on server",
-	},
 }, logger.GlobalLoggerFlags...)
 
 // If woodpecker is running inside a container the default value for
