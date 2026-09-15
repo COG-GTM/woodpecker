@@ -31,12 +31,16 @@ import (
 )
 
 func runGrpcServer(ctx context.Context, c *cli.Command, _store store.Store) error {
+	jwtSecret, err := setupGRPCSecret(c, _store)
+	if err != nil {
+		return fmt.Errorf("could not setup grpc secret: %w", err)
+	}
+
 	lis, err := net.Listen("tcp", c.String("grpc-addr"))
 	if err != nil {
 		return fmt.Errorf("failed to listen on grpc-addr: %w", err)
 	}
 
-	jwtSecret := c.String("grpc-secret")
 	jwtManager := woodpeckerGrpcServer.NewJWTManager(jwtSecret)
 
 	authorizer := woodpeckerGrpcServer.NewAuthorizer(jwtManager)

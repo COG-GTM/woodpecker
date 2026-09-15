@@ -153,6 +153,30 @@ func setupJWTSecret(_store store.Store) (string, error) {
 	return jwtSecret, nil
 }
 
+const grpcSecretID = "grpc-secret"
+
+func setupGRPCSecret(c *cli.Command, _store store.Store) (string, error) {
+	if secret := c.String("grpc-secret"); secret != "" {
+		if secret == "secret" {
+			return "", errors.New("WOODPECKER_GRPC_SECRET is set to the insecure default value \"secret\"; set a strong random value or unset it to have one generated")
+		}
+		return secret, nil
+	}
+	grpcSecret, err := _store.ServerConfigGet(grpcSecretID)
+	if errors.Is(err, types.RecordNotExist) {
+		grpcSecret := base32.StdEncoding.EncodeToString(securecookie.GenerateRandomKey(32))
+		if err := _store.ServerConfigSet(grpcSecretID, grpcSecret); err != nil {
+			return "", err
+		}
+		log.Debug().Msg("created grpc secret")
+		return grpcSecret, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return grpcSecret, nil
+}
+
 func setupEvilGlobals(ctx context.Context, c *cli.Command, s store.Store) (err error) {
 	// services
 	server.Config.Services.Logs = logging.New()

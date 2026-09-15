@@ -116,8 +116,7 @@ var flags = append([]cli.Flag{
 			cli.File(os.Getenv("WOODPECKER_GRPC_SECRET_FILE")),
 			cli.EnvVar("WOODPECKER_GRPC_SECRET")),
 		Name:  "grpc-secret",
-		Usage: "grpc jwt secret",
-		Value: "secret",
+		Usage: "grpc jwt secret; generated and persisted in the server config store if not set",
 		Config: cli.StringConfig{
 			TrimSpace: true,
 		},
