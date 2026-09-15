@@ -97,10 +97,18 @@ func ResumeQueue(c *gin.Context) {
 //	@Tags		Pipeline queues
 //	@Param		Authorization	header	string	true	"Insert your personal access token"	default(Bearer <personal access token>)
 func BlockTilQueueHasRunningItem(c *gin.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		info := server.Config.Services.Queue.Info(c)
 		if info.Stats.Running == 0 {
 			break
+		}
+		select {
+		case <-c.Request.Context().Done():
+			c.Status(http.StatusRequestTimeout)
+			return
+		case <-ticker.C:
 		}
 	}
 	c.Status(http.StatusNoContent)
