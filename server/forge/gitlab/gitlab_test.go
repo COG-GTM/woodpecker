@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge/gitlab/fixtures"
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge/types"
@@ -82,6 +83,23 @@ func Test_GitLab(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Len(t, _projects, 2)
+		for _, p := range _projects {
+			assert.True(t, p.Perm.Pull)
+			assert.True(t, p.Perm.Push)
+			assert.True(t, p.Perm.Admin)
+		}
+	})
+
+	t.Run("Should derive project member from listed permissions", func(t *testing.T) {
+		assert.Nil(t, projectMemberFromPermissions(nil))
+		assert.Nil(t, projectMemberFromPermissions(&gitlab.Permissions{}))
+		assert.Equal(t, gitlab.MaintainerPermissions, projectMemberFromPermissions(&gitlab.Permissions{
+			ProjectAccess: &gitlab.ProjectAccess{AccessLevel: gitlab.GuestPermissions},
+			GroupAccess:   &gitlab.GroupAccess{AccessLevel: gitlab.MaintainerPermissions},
+		}).AccessLevel)
+		assert.Equal(t, gitlab.DeveloperPermissions, projectMemberFromPermissions(&gitlab.Permissions{
+			ProjectAccess: &gitlab.ProjectAccess{AccessLevel: gitlab.DeveloperPermissions},
+		}).AccessLevel)
 	})
 
 	// Test repository method
