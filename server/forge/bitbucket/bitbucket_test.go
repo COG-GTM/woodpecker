@@ -109,6 +109,11 @@ func TestBitbucket(t *testing.T) {
 	_, err = c.Repo(ctx, fakeUser, "", fakeRepoNotFound.Owner, fakeRepoNotFound.Name)
 	assert.Error(t, err)
 
+	repo, err = c.Repo(ctx, fakeUser, fakeRepoRemoteID, "", "")
+	assert.NoError(t, err)
+	assert.Equal(t, fakeRepo.FullName, repo.FullName)
+	assert.Equal(t, fakeRepoRemoteID, repo.ForgeRemoteID)
+
 	repos, err := c.Repos(ctx, fakeUser)
 	assert.NoError(t, err)
 	assert.Equal(t, fakeRepo.FullName, repos[0].FullName)
@@ -259,6 +264,8 @@ var (
 		Name:     "repo_name",
 		FullName: "test_name/repo_name",
 	}
+
+	fakeRepoRemoteID = model.ForgeRemoteID("{6a8b2c1d-1111-4e2f-9a3b-5c6d7e8f9a0b}")
 
 	fakeRepoNotFound = &model.Repo{
 		Owner:    "test_name",

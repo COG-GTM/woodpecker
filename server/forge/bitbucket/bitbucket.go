@@ -23,8 +23,10 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/errgroup"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server"
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge"
@@ -40,6 +42,8 @@ const (
 	DefaultAPI = "https://api.bitbucket.org"
 	DefaultURL = "https://bitbucket.org"
 	pageSize   = 100
+
+	maxConcurrentFileFetches = 8
 )
 
 // Opts are forge options for bitbucket.
@@ -151,19 +155,24 @@ func (c *config) Repo(ctx context.Context, u *model.User, remoteID model.ForgeRe
 	if remoteID.IsValid() {
 		name = string(remoteID)
 	}
+	client := c.newClient(ctx, u)
 	if owner == "" {
-		repos, err := c.Repos(ctx, u)
+		perm, err := findPermissionByRemoteID(client, name)
 		if err != nil {
 			return nil, err
 		}
-		for _, repo := range repos {
-			if string(repo.ForgeRemoteID) == name {
-				owner = repo.Owner
-				break
+		if perm != nil {
+			repoOwner, repoName, ok := strings.Cut(perm.Repo.FullName, "/")
+			if !ok {
+				return nil, fmt.Errorf("unexpected repository full name %q", perm.Repo.FullName)
 			}
+			repo, err := client.FindRepo(repoOwner, repoName)
+			if err != nil {
+				return nil, err
+			}
+			return convertRepo(repo, perm), nil
 		}
 	}
-	client := c.newClient(ctx, u)
 	repo, err := client.FindRepo(owner, name)
 	if err != nil {
 		return nil, err
@@ -173,6 +182,26 @@ func (c *config) Repo(ctx context.Context, u *model.User, remoteID model.ForgeRe
 		return nil, err
 	}
 	return convertRepo(repo, perm), nil
+}
+
+// findPermissionByRemoteID walks the user's repository permissions page by
+// page and stops at the first repository whose UUID matches remoteID.
+// It returns nil if no such repository is accessible to the user.
+func findPermissionByRemoteID(client *internal.Client, remoteID string) (*internal.RepoPerm, error) {
+	for page := 1; ; page++ {
+		resp, err := client.ListPermissions(&internal.ListOpts{Page: page, PageLen: pageSize})
+		if err != nil {
+			return nil, err
+		}
+		for _, perm := range resp.Values {
+			if perm.Repo.UUID == remoteID {
+				return perm, nil
+			}
+		}
+		if len(resp.Values) < pageSize {
+			return nil, nil
+		}
+	}
 }
 
 // Repos returns a list of all repositories for Bitbucket account, including
@@ -251,22 +280,34 @@ func (c *config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 			}
 			return nil, err
 		}
-		for _, file := range filesResp.Values {
+		pageFiles := make([]*forge_types.FileMeta, len(filesResp.Values))
+		g, _ := errgroup.WithContext(ctx)
+		g.SetLimit(maxConcurrentFileFetches)
+		for i, file := range filesResp.Values {
 			_, filename := filepath.Split(file.Path)
-			repoFile := forge_types.FileMeta{
+			repoFile := &forge_types.FileMeta{
 				Name: filename,
 			}
-			if file.Type == "commit_file" {
-				fileData, err := c.newClient(ctx, u).FindSource(r.Owner, r.Name, p.Commit, file.Path)
+			pageFiles[i] = repoFile
+			if file.Type != "commit_file" {
+				continue
+			}
+			filePath := file.Path
+			g.Go(func() error {
+				fileData, err := client.FindSource(r.Owner, r.Name, p.Commit, filePath)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				if fileData != nil {
 					repoFile.Data = []byte(*fileData)
 				}
-			}
-			repoPathFiles = append(repoPathFiles, &repoFile)
+				return nil
+			})
 		}
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
+		repoPathFiles = append(repoPathFiles, pageFiles...)
 
 		// Check for more results page
 		if filesResp.Next == nil {
