@@ -270,16 +270,18 @@ func HandleAuth(c *gin.Context) {
 func updateRepoPermissions(c *gin.Context, user *model.User, _store store.Store, _forge forge.Forge) error {
 	repos, _ := _forge.Repos(c, user)
 
-	for _, forgeRepo := range repos {
-		dbRepo, err := _store.GetRepoForgeID(forgeRepo.ForgeRemoteID)
-		if err != nil && errors.Is(err, types.RecordNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
+	activeRepos, err := _store.RepoListAll(true, &model.ListOptions{All: true})
+	if err != nil {
+		return err
+	}
+	activeReposByForgeID := make(map[model.ForgeRemoteID]*model.Repo, len(activeRepos))
+	for _, dbRepo := range activeRepos {
+		activeReposByForgeID[dbRepo.ForgeRemoteID] = dbRepo
+	}
 
-		if !dbRepo.IsActive {
+	for _, forgeRepo := range repos {
+		dbRepo, ok := activeReposByForgeID[forgeRepo.ForgeRemoteID]
+		if !ok {
 			continue
 		}
 
