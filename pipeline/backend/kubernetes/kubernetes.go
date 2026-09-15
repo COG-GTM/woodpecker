@@ -32,6 +32,7 @@ import (
 	"gopkg.in/yaml.v3"
 	v1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -309,7 +310,14 @@ func (e *kube) WaitStep(ctx context.Context, step *types.Step, taskUUID string) 
 		}
 	}
 
-	si := informers.NewSharedInformerFactoryWithOptions(e.client, defaultResyncDuration, informers.WithNamespace(e.config.GetNamespace(step.OrgID)))
+	si := informers.NewSharedInformerFactoryWithOptions(
+		e.client,
+		defaultResyncDuration,
+		informers.WithNamespace(e.config.GetNamespace(step.OrgID)),
+		informers.WithTweakListOptions(func(o *meta_v1.ListOptions) {
+			o.FieldSelector = fields.OneTermEqualSelector("metadata.name", podName).String()
+		}),
+	)
 	if _, err := si.Core().V1().Pods().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			UpdateFunc: podUpdated,
@@ -384,7 +392,14 @@ func (e *kube) TailStep(ctx context.Context, step *types.Step, taskUUID string) 
 		}
 	}
 
-	si := informers.NewSharedInformerFactoryWithOptions(e.client, defaultResyncDuration, informers.WithNamespace(e.config.GetNamespace(step.OrgID)))
+	si := informers.NewSharedInformerFactoryWithOptions(
+		e.client,
+		defaultResyncDuration,
+		informers.WithNamespace(e.config.GetNamespace(step.OrgID)),
+		informers.WithTweakListOptions(func(o *meta_v1.ListOptions) {
+			o.FieldSelector = fields.OneTermEqualSelector("metadata.name", podName).String()
+		}),
+	)
 	if _, err := si.Core().V1().Pods().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			UpdateFunc: podUpdated,
