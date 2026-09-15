@@ -40,34 +40,6 @@ func (_m *Forge) Activate(ctx context.Context, u *model.User, r *model.Repo, lin
 	return r0
 }
 
-// Auth provides a mock function with given fields: ctx, token, secret
-func (_m *Forge) Auth(ctx context.Context, token string, secret string) (string, error) {
-	ret := _m.Called(ctx, token, secret)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Auth")
-	}
-
-	var r0 string
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
-		return rf(ctx, token, secret)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
-		r0 = rf(ctx, token, secret)
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = rf(ctx, token, secret)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
 // BranchHead provides a mock function with given fields: ctx, u, r, branch
 func (_m *Forge) BranchHead(ctx context.Context, u *model.User, r *model.Repo, branch string) (*model.Commit, error) {
 	ret := _m.Called(ctx, u, r, branch)

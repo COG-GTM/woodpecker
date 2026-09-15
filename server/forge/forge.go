@@ -38,10 +38,6 @@ type Forge interface {
 	// forge user details and the URL to redirect to if not authorized yet.
 	Login(ctx context.Context, r *types.OAuthRequest) (*model.User, string, error)
 
-	// Auth authenticates the session and returns the forge user
-	// login for the given token and secret
-	Auth(ctx context.Context, token, secret string) (string, error)
-
 	// Teams fetches a list of team memberships from the forge.
 	Teams(ctx context.Context, u *model.User) ([]*model.Team, error)
 
