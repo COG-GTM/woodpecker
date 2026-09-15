@@ -164,6 +164,7 @@ func (c *client) Repo(ctx context.Context, u *model.User, rID model.ForgeRemoteI
 	var repo *bb.Repository
 	if rID.IsValid() {
 		opts := &bb.RepositorySearchOptions{Name: name, ProjectKey: owner, Permission: bb.PermissionRepoWrite, ListOptions: bb.ListOptions{Limit: listLimit}}
+		// Bitbucket Data Center's REST API has no direct lookup by numeric repository ID.
 		for {
 			repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
 			if err != nil {
@@ -175,7 +176,7 @@ func (c *client) Repo(ctx context.Context, u *model.User, rID model.ForgeRemoteI
 					break
 				}
 			}
-			if resp.LastPage {
+			if repo != nil || resp.LastPage {
 				break
 			}
 			opts.Start = resp.NextPageStart
@@ -212,6 +213,7 @@ func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 
 	opts := &bb.RepositorySearchOptions{Permission: bb.PermissionRepoWrite, ListOptions: bb.ListOptions{Limit: listLimit}}
 	all := make([]*model.Repo, 0)
+	byID := make(map[model.ForgeRemoteID]int)
 	for {
 		repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
 		if err != nil {
@@ -220,6 +222,7 @@ func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 		for _, r := range repos {
 			perms := &model.Perm{Pull: true, Push: true, Admin: false}
 			all = append(all, convertRepo(r, perms, ""))
+			byID[all[len(all)-1].ForgeRemoteID] = len(all) - 1
 		}
 		if resp.LastPage {
 			break
@@ -235,11 +238,8 @@ func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 			return nil, fmt.Errorf("unable to search repositories: %w", err)
 		}
 		for _, r := range repos {
-			for i, c := range all {
-				if c.ForgeRemoteID == convertID(r.ID) {
-					all[i].Perm = &model.Perm{Pull: true, Push: true, Admin: true}
-					break
-				}
+			if i, ok := byID[convertID(r.ID)]; ok {
+				all[i].Perm = &model.Perm{Pull: true, Push: true, Admin: true}
 			}
 		}
 		if resp.LastPage {
@@ -251,12 +251,7 @@ func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 	return all, nil
 }
 
-func (c *client) File(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, f string) ([]byte, error) {
-	bc, err := c.newClient(ctx, u)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
-	}
-
+func (c *client) getFile(ctx context.Context, bc *bb.Client, r *model.Repo, p *model.Pipeline, f string) ([]byte, error) {
 	b, resp, err := bc.Projects.GetTextFileContent(ctx, r.Owner, r.Name, f, p.Commit)
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
@@ -268,6 +263,15 @@ func (c *client) File(ctx context.Context, u *model.User, r *model.Repo, p *mode
 		return nil, err
 	}
 	return b, nil
+}
+
+func (c *client) File(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, f string) ([]byte, error) {
+	bc, err := c.newClient(ctx, u)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
+	}
+
+	return c.getFile(ctx, bc, r, p, f)
 }
 
 func (c *client) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, path string) ([]*forge_types.FileMeta, error) {
@@ -291,7 +295,7 @@ func (c *client) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 		}
 		for _, f := range list {
 			fullPath := fmt.Sprintf("%s/%s", path, f)
-			data, err := c.File(ctx, u, r, p, fullPath)
+			data, err := c.getFile(ctx, bc, r, p, fullPath)
 			if err != nil {
 				return nil, err
 			}
