@@ -39,6 +39,12 @@ const (
 	// How many batches of logs to keep for each client before starting to
 	// drop them if the client is not consuming them faster than they arrive.
 	maxQueuedBatchesPerClient int = 30
+
+	// Interval between SSE keep-alive comments sent to the client.
+	pingInterval = 30 * time.Second
+
+	// After this long without any log entry the log stream is closed.
+	logStreamIdleTimeout = time.Hour
 )
 
 // EventStreamSSE
@@ -109,13 +115,16 @@ func EventStreamSSE(c *gin.Context) {
 		cancel(nil)
 	}()
 
+	pingTicker := time.NewTicker(pingInterval)
+	defer pingTicker.Stop()
+
 	for {
 		select {
 		case <-rw.CloseNotify():
 			return
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Second * 30):
+		case <-pingTicker.C:
 			logWriteStringErr(io.WriteString(rw, ": ping\n\n"))
 			flusher.Flush()
 		case buf, ok := <-eventChan:
@@ -265,32 +274,62 @@ func LogStreamSSE(c *gin.Context) {
 
 	// retry: 10000\n
 
+	writeEntry := func(buf []byte) {
+		if id > last {
+			logWriteStringErr(io.WriteString(rw, "id: "+strconv.Itoa(id)))
+			logWriteStringErr(io.WriteString(rw, "\n"))
+			logWriteStringErr(io.WriteString(rw, "data: "))
+			logWriteStringErr(rw.Write(buf))
+			logWriteStringErr(io.WriteString(rw, "\n\n"))
+		}
+		id++
+	}
+
+	// after 1 hour of idle (no log entries) end the stream.
+	// this is more of a safety mechanism than anything,
+	// and can be removed once the code is more mature.
+	idleTimer := time.NewTimer(logStreamIdleTimeout)
+	defer idleTimer.Stop()
+
+	pingTicker := time.NewTicker(pingInterval)
+	defer pingTicker.Stop()
+
 	for {
 		select {
-		// after 1 hour of idle (no response) end the stream.
-		// this is more of a safety mechanism than anything,
-		// and can be removed once the code is more mature.
-		case <-time.After(time.Hour):
+		case <-idleTimer.C:
 			return
 		case <-rw.CloseNotify():
 			return
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Second * 30):
+		case <-pingTicker.C:
 			logWriteStringErr(io.WriteString(rw, ": ping\n\n"))
 			flusher.Flush()
 		case buf, ok := <-logChan:
-			if ok {
-				if id > last {
-					logWriteStringErr(io.WriteString(rw, "id: "+strconv.Itoa(id)))
-					logWriteStringErr(io.WriteString(rw, "\n"))
-					logWriteStringErr(io.WriteString(rw, "data: "))
-					logWriteStringErr(rw.Write(buf))
-					logWriteStringErr(io.WriteString(rw, "\n\n"))
-					flusher.Flush()
-				}
-				id++
+			if !ok {
+				continue
 			}
+			writeEntry(buf)
+
+			// drain entries that are already queued so a burst is flushed once
+		drain:
+			for {
+				select {
+				case buf, ok := <-logChan:
+					if !ok {
+						break drain
+					}
+					writeEntry(buf)
+				default:
+					break drain
+				}
+			}
+			flusher.Flush()
+
+			if !idleTimer.Stop() {
+				<-idleTimer.C
+			}
+			idleTimer.Reset(logStreamIdleTimeout)
 		}
 	}
 }
