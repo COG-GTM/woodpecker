@@ -17,6 +17,7 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	prometheus_auto "github.com/prometheus/client_golang/prometheus/promauto"
@@ -55,6 +56,7 @@ func NewWoodpeckerServer(queue queue.Queue, logger logging.Log, pubsub *pubsub.P
 		logger:        logger,
 		pipelineTime:  pipelineTime,
 		pipelineCount: pipelineCount,
+		logStepCache:  new(sync.Map),
 	}
 	return &WoodpeckerServer{peer: peer}
 }
