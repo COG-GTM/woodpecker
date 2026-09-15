@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,6 +51,20 @@ type RPC struct {
 	store         store.Store
 	pipelineTime  *prometheus.GaugeVec
 	pipelineCount *prometheus.CounterVec
+
+	// logStepCache holds a logStepContext per running step (keyed by step UUID)
+	// so consecutive Log calls do not have to resolve the same rows again.
+	logStepCache *sync.Map
+}
+
+// logStepContext is the invariant context of a running step needed to accept log entries.
+// It is populated on the first Log call for a step and removed once the workflow is done.
+type logStepContext struct {
+	step    *model.Step
+	agentID int64
+	// lastWork mirrors agent.LastWork so the throttled LastWork update can be
+	// decided without loading the agent.
+	lastWork atomic.Int64
 }
 
 // Next blocks until it provides the next workflow to execute.
@@ -366,6 +382,7 @@ func (s *RPC) Done(c context.Context, strWorkflowID string, state rpc.WorkflowSt
 			}
 		}
 	}()
+	s.invalidateLogStepCache(workflow.Children)
 
 	if err := s.notify(repo, currentPipeline); err != nil {
 		return err
@@ -385,28 +402,18 @@ func (s *RPC) Done(c context.Context, strWorkflowID string, state rpc.WorkflowSt
 // Log writes a log entry to the database and publishes it to the pubsub.
 // An explicit stepUUID makes it obvious that all entries must come from the same step.
 func (s *RPC) Log(c context.Context, stepUUID string, rpcLogEntries []*rpc.LogEntry) error {
-	step, err := s.store.StepByUUID(stepUUID)
-	if err != nil {
-		return fmt.Errorf("could not find step with uuid %s in store: %w", stepUUID, err)
-	}
-
-	agent, err := s.getAgentFromContext(c)
+	agentID, err := s.getAgentIDFromContext(c)
 	if err != nil {
 		return err
 	}
 
-	currentPipeline, err := s.store.GetPipeline(step.PipelineID)
+	stepCtx, err := s.getLogStepContext(c, agentID, stepUUID)
 	if err != nil {
-		log.Error().Err(err).Msgf("cannot find pipeline with id %d", step.PipelineID)
 		return err
 	}
+	step := stepCtx.step
 
-	// check before agent can alter some state
-	if err := s.checkAgentPermissionByWorkflow(c, agent, "", currentPipeline, nil); err != nil {
-		return err
-	}
-
-	err = s.updateAgentLastWork(agent)
+	err = s.updateCachedAgentLastWork(stepCtx)
 	if err != nil {
 		return err
 	}
@@ -439,6 +446,80 @@ func (s *RPC) Log(c context.Context, stepUUID string, rpcLogEntries []*rpc.LogEn
 	}
 
 	return nil
+}
+
+// getLogStepContext returns the cached step context for the given step and agent,
+// resolving step, pipeline, repo and agent and checking the agent's permission on a cache miss.
+func (s *RPC) getLogStepContext(c context.Context, agentID int64, stepUUID string) (*logStepContext, error) {
+	if s.logStepCache == nil {
+		return nil, errors.New("log step cache is not initialized")
+	}
+
+	if cached, ok := s.logStepCache.Load(stepUUID); ok {
+		stepCtx, _ := cached.(*logStepContext)
+		if stepCtx != nil && stepCtx.agentID == agentID {
+			return stepCtx, nil
+		}
+	}
+
+	step, err := s.store.StepByUUID(stepUUID)
+	if err != nil {
+		return nil, fmt.Errorf("could not find step with uuid %s in store: %w", stepUUID, err)
+	}
+
+	agent, err := s.store.AgentFind(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	currentPipeline, err := s.store.GetPipeline(step.PipelineID)
+	if err != nil {
+		log.Error().Err(err).Msgf("cannot find pipeline with id %d", step.PipelineID)
+		return nil, err
+	}
+
+	// check before agent can alter some state
+	if err := s.checkAgentPermissionByWorkflow(c, agent, "", currentPipeline, nil); err != nil {
+		return nil, err
+	}
+
+	stepCtx := &logStepContext{
+		step:    step,
+		agentID: agent.ID,
+	}
+	stepCtx.lastWork.Store(agent.LastWork)
+	s.logStepCache.Store(stepUUID, stepCtx)
+
+	return stepCtx, nil
+}
+
+// updateCachedAgentLastWork updates agent.LastWork of the agent running the cached step,
+// loading the agent only when the throttled update is actually due.
+func (s *RPC) updateCachedAgentLastWork(stepCtx *logStepContext) error {
+	if time.Unix(stepCtx.lastWork.Load(), 0).Add(updateAgentLastWorkDelay).After(time.Now()) {
+		return nil
+	}
+
+	agent, err := s.store.AgentFind(stepCtx.agentID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.updateAgentLastWork(agent); err != nil {
+		return err
+	}
+	stepCtx.lastWork.Store(agent.LastWork)
+
+	return nil
+}
+
+func (s *RPC) invalidateLogStepCache(steps []*model.Step) {
+	if s.logStepCache == nil {
+		return
+	}
+	for _, step := range steps {
+		s.logStepCache.Delete(step.UUID)
+	}
 }
 
 func (s *RPC) RegisterAgent(ctx context.Context, info rpc.AgentInfo) (int64, error) {
@@ -591,23 +672,32 @@ func (s *RPC) notify(repo *model.Repo, pipeline *model.Pipeline) (err error) {
 }
 
 func (s *RPC) getAgentFromContext(ctx context.Context) (*model.Agent, error) {
+	agentID, err := s.getAgentIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.store.AgentFind(agentID)
+}
+
+func (s *RPC) getAgentIDFromContext(ctx context.Context) (int64, error) {
 	md, ok := grpcMetadata.FromIncomingContext(ctx)
 	if !ok {
-		return nil, errors.New("metadata is not provided")
+		return 0, errors.New("metadata is not provided")
 	}
 
 	values := md["agent_id"]
 	if len(values) == 0 {
-		return nil, errors.New("agent_id is not provided")
+		return 0, errors.New("agent_id is not provided")
 	}
 
 	_agentID := values[0]
 	agentID, err := strconv.ParseInt(_agentID, 10, 64)
 	if err != nil {
-		return nil, errors.New("agent_id is not a valid integer")
+		return 0, errors.New("agent_id is not a valid integer")
 	}
 
-	return s.store.AgentFind(agentID)
+	return agentID, nil
 }
 
 func (s *RPC) getHostnameFromContext(ctx context.Context) (string, error) {
