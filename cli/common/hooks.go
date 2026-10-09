@@ -10,6 +10,7 @@ import (
 
 	"go.woodpecker-ci.org/woodpecker/v3/cli/internal/config"
 	"go.woodpecker-ci.org/woodpecker/v3/cli/update"
+	"go.woodpecker-ci.org/woodpecker/v3/shared/logger"
 )
 
 var (
@@ -18,7 +19,7 @@ var (
 )
 
 func Before(ctx context.Context, c *cli.Command) (context.Context, error) {
-	if err := setupGlobalLogger(ctx, c); err != nil {
+	if err := logger.SetupGlobalLogger(ctx, c, false); err != nil {
 		return ctx, err
 	}
 
