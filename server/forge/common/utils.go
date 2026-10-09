@@ -85,3 +85,37 @@ func RepoUserForgeID(ctx context.Context, repoForgeID model.ForgeRemoteID) (*mod
 	}
 	return RepoUser(ctx, r)
 }
+
+// FixMalformedAvatar fixes an avatar url if malformed (currently a known bug with gitea and forgejo).
+func FixMalformedAvatar(url string) string {
+	index := strings.Index(url, "///")
+	if index != -1 {
+		return url[index+1:]
+	}
+	index = strings.Index(url, "//avatars/")
+	if index != -1 {
+		return strings.ReplaceAll(url, "//avatars/", "/avatars/")
+	}
+	return url
+}
+
+// ExpandAvatar converts a relative avatar URL to the absolute url.
+func ExpandAvatar(repo, rawURL string) string {
+	aURL, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	if aURL.IsAbs() {
+		// Url is already absolute
+		return aURL.String()
+	}
+
+	// Resolve to base
+	burl, err := url.Parse(repo)
+	if err != nil {
+		return rawURL
+	}
+	aURL = burl.ResolveReference(aURL)
+
+	return aURL.String()
+}

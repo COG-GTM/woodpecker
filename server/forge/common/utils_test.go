@@ -27,3 +27,58 @@ func Test_Netrc(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "git.example.com", host)
 }
+
+func Test_FixMalformedAvatar(t *testing.T) {
+	urls := []struct {
+		Before string
+		After  string
+	}{
+		{
+			"http://gitea.golang.org///1.gravatar.com/avatar/8c58a0be77ee441bb8f8595b7f1b4e87",
+			"//1.gravatar.com/avatar/8c58a0be77ee441bb8f8595b7f1b4e87",
+		},
+		{
+			"//1.gravatar.com/avatar/8c58a0be77ee441bb8f8595b7f1b4e87",
+			"//1.gravatar.com/avatar/8c58a0be77ee441bb8f8595b7f1b4e87",
+		},
+		{
+			"http://gitea.golang.org/avatars/1",
+			"http://gitea.golang.org/avatars/1",
+		},
+		{
+			"http://gitea.golang.org//avatars/1",
+			"http://gitea.golang.org/avatars/1",
+		},
+	}
+
+	for _, url := range urls {
+		got := common.FixMalformedAvatar(url.Before)
+		assert.Equal(t, url.After, got)
+	}
+}
+
+func Test_ExpandAvatar(t *testing.T) {
+	urls := []struct {
+		Before string
+		After  string
+	}{
+		{
+			"/avatars/1",
+			"http://gitea.io/avatars/1",
+		},
+		{
+			"//1.gravatar.com/avatar/8c58a0be77ee441bb8f8595b7f1b4e87",
+			"http://1.gravatar.com/avatar/8c58a0be77ee441bb8f8595b7f1b4e87",
+		},
+		{
+			"/gitea/avatars/2",
+			"http://gitea.io/gitea/avatars/2",
+		},
+	}
+
+	repo := "http://gitea.io/foo/bar"
+	for _, url := range urls {
+		got := common.ExpandAvatar(repo, url.Before)
+		assert.Equal(t, url.After, got)
+	}
+}

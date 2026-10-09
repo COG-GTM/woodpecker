@@ -24,6 +24,7 @@ import (
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v2"
 
+	"go.woodpecker-ci.org/woodpecker/v3/server/forge/common"
 	"go.woodpecker-ci.org/woodpecker/v3/server/model"
 	"go.woodpecker-ci.org/woodpecker/v3/shared/utils"
 )
@@ -31,7 +32,7 @@ import (
 // toRepo converts a Forgejo repository to a Woodpecker repository.
 func toRepo(from *forgejo.Repository) *model.Repo {
 	name := strings.Split(from.FullName, "/")[1]
-	avatar := expandAvatar(
+	avatar := common.ExpandAvatar(
 		from.HTMLURL,
 		from.Owner.AvatarURL,
 	)
@@ -64,15 +65,15 @@ func toPerm(from *forgejo.Permission) *model.Perm {
 func toTeam(from *forgejo.Organization, link string) *model.Team {
 	return &model.Team{
 		Login:  from.UserName,
-		Avatar: expandAvatar(link, from.AvatarURL),
+		Avatar: common.ExpandAvatar(link, from.AvatarURL),
 	}
 }
 
 // pipelineFromPush extracts the Pipeline data from a Forgejo push hook.
 func pipelineFromPush(hook *pushHook) *model.Pipeline {
-	avatar := expandAvatar(
+	avatar := common.ExpandAvatar(
 		hook.Repo.HTMLURL,
-		fixMalformedAvatar(hook.Sender.AvatarURL),
+		common.FixMalformedAvatar(hook.Sender.AvatarURL),
 	)
 
 	var message string
@@ -121,9 +122,9 @@ func getChangedFilesFromPushHook(hook *pushHook) []string {
 
 // pipelineFromTag extracts the Pipeline data from a Forgejo tag hook.
 func pipelineFromTag(hook *pushHook) *model.Pipeline {
-	avatar := expandAvatar(
+	avatar := common.ExpandAvatar(
 		hook.Repo.HTMLURL,
-		fixMalformedAvatar(hook.Sender.AvatarURL),
+		common.FixMalformedAvatar(hook.Sender.AvatarURL),
 	)
 	ref := strings.TrimPrefix(hook.Ref, "refs/tags/")
 
@@ -143,9 +144,9 @@ func pipelineFromTag(hook *pushHook) *model.Pipeline {
 
 // pipelineFromPullRequest extracts the Pipeline data from a Forgejo pull_request hook.
 func pipelineFromPullRequest(hook *pullRequestHook) *model.Pipeline {
-	avatar := expandAvatar(
+	avatar := common.ExpandAvatar(
 		hook.Repo.HTMLURL,
-		fixMalformedAvatar(hook.PullRequest.Poster.AvatarURL),
+		common.FixMalformedAvatar(hook.PullRequest.Poster.AvatarURL),
 	)
 
 	event := model.EventPull
@@ -177,9 +178,9 @@ func pipelineFromPullRequest(hook *pullRequestHook) *model.Pipeline {
 }
 
 func pipelineFromRelease(hook *releaseHook) *model.Pipeline {
-	avatar := expandAvatar(
+	avatar := common.ExpandAvatar(
 		hook.Repo.HTMLURL,
-		fixMalformedAvatar(hook.Sender.AvatarURL),
+		common.FixMalformedAvatar(hook.Sender.AvatarURL),
 	)
 
 	return &model.Pipeline{
@@ -213,42 +214,6 @@ func parseRelease(r io.Reader) (*releaseHook, error) {
 	pr := new(releaseHook)
 	err := json.NewDecoder(r).Decode(pr)
 	return pr, err
-}
-
-// fixMalformedAvatar is a helper function that fixes an avatar url if malformed
-// (currently a known bug with forgejo).
-func fixMalformedAvatar(url string) string {
-	index := strings.Index(url, "///")
-	if index != -1 {
-		return url[index+1:]
-	}
-	index = strings.Index(url, "//avatars/")
-	if index != -1 {
-		return strings.ReplaceAll(url, "//avatars/", "/avatars/")
-	}
-	return url
-}
-
-// expandAvatar is a helper function that converts a relative avatar URL to the
-// absolute url.
-func expandAvatar(repo, rawURL string) string {
-	aURL, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	if aURL.IsAbs() {
-		// Url is already absolute
-		return aURL.String()
-	}
-
-	// Resolve to base
-	burl, err := url.Parse(repo)
-	if err != nil {
-		return rawURL
-	}
-	aURL = burl.ResolveReference(aURL)
-
-	return aURL.String()
 }
 
 // helper function to return matching hooks.

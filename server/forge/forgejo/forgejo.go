@@ -137,7 +137,7 @@ func (c *Forgejo) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mo
 		Login:         account.UserName,
 		Email:         account.Email,
 		ForgeRemoteID: model.ForgeRemoteID(fmt.Sprint(account.ID)),
-		Avatar:        expandAvatar(c.url, account.AvatarURL),
+		Avatar:        common.ExpandAvatar(c.url, account.AvatarURL),
 	}, redirectURL, nil
 }
 
