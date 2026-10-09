@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -43,12 +44,27 @@ func pinger(_ context.Context, c *cli.Command) error {
 		scheme = "https"
 	}
 
+	// the health route is mounted under the path prefix of server-host
+	rootPath := ""
+	if u, err := url.Parse(c.String("server-host")); err == nil {
+		rootPath = strings.TrimSuffix(u.Path, "/")
+		if rootPath != "" && !strings.HasPrefix(rootPath, "/") {
+			rootPath = "/" + rootPath
+		}
+	}
+
 	// create the health url
-	healthURL := fmt.Sprintf("%s://%s/healthz", scheme, serverAddr)
+	healthURL := fmt.Sprintf("%s://%s%s/healthz", scheme, serverAddr, rootPath)
 	log.Trace().Msgf("try to ping with url '%s'", healthURL)
 
 	// ask server if all is healthy
-	client := http.Client{Timeout: pingTimeout}
+	client := http.Client{
+		Timeout: pingTimeout,
+		// a redirect means /healthz was not served by the health handler
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Get(healthURL)
 	if err != nil {
 		if strings.Contains(err.Error(), "deadline exceeded") {
