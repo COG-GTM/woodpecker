@@ -30,7 +30,4 @@ const (
 const (
 	FailureIgnore = "ignore"
 	FailureFail   = "fail"
-	//nolint:godot
-	// TODO: Not implemented yet.
-	// FailureCancel = "cancel"
 )
