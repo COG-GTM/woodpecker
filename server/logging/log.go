@@ -23,7 +23,7 @@ import (
 	"go.woodpecker-ci.org/woodpecker/v3/server/model"
 )
 
-// TODO: writes to subscribers block, so a slow client can stall the stream.
+// TODO: Tail sends the backlog to a new subscriber while holding the stream lock, so a slow client can stall the stream.
 
 type subscriber struct {
 	receiver LogChan
