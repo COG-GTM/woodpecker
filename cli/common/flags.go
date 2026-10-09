@@ -63,19 +63,17 @@ var GlobalFlags = append([]cli.Flag{
 	},
 }, logger.GlobalLoggerFlags...)
 
-// FormatFlag return format flag with value set based on template
-// if hidden value is set, flag will be hidden.
-func FormatFlag(tmpl string, deprecated bool, hidden ...bool) *cli.StringFlag {
+// FormatFlag return format flag with value set based on template.
+func FormatFlag(tmpl string, deprecated bool) *cli.StringFlag {
 	usage := "format output"
 	if deprecated {
 		usage = fmt.Sprintf("%s (deprecated)", usage)
 	}
 
 	return &cli.StringFlag{
-		Name:   "format",
-		Usage:  usage,
-		Value:  tmpl,
-		Hidden: len(hidden) != 0,
+		Name:  "format",
+		Usage: usage,
+		Value: tmpl,
 	}
 }
 
