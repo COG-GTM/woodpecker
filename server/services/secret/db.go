@@ -42,31 +42,7 @@ func (d *db) SecretListPipeline(repo *model.Repo, _ *model.Pipeline) ([]*model.S
 		return nil, err
 	}
 
-	// Return only secrets with unique name
-	// Priority order in case of duplicate names are repository, user/organization, global
-	secrets := make([]*model.Secret, 0, len(s))
-	uniq := make(map[string]struct{})
-	for _, condition := range []struct {
-		IsRepository   bool
-		IsOrganization bool
-		IsGlobal       bool
-	}{
-		{IsRepository: true},
-		{IsOrganization: true},
-		{IsGlobal: true},
-	} {
-		for _, secret := range s {
-			if secret.IsRepository() != condition.IsRepository || secret.IsOrganization() != condition.IsOrganization || secret.IsGlobal() != condition.IsGlobal {
-				continue
-			}
-			if _, ok := uniq[secret.Name]; ok {
-				continue
-			}
-			uniq[secret.Name] = struct{}{}
-			secrets = append(secrets, secret)
-		}
-	}
-	return secrets, nil
+	return model.UniqueByScopePriority(s, func(item *model.Secret) string { return item.Name }), nil
 }
 
 func (d *db) SecretCreate(_ *model.Repo, in *model.Secret) error {
