@@ -57,8 +57,8 @@ func pinger(_ context.Context, c *cli.Command) error {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 && resp.StatusCode >= 300 {
-		return fmt.Errorf("server returned bad status code")
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("server returned bad status code: %d", resp.StatusCode)
 	}
 	return nil
 }
