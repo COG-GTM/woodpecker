@@ -284,7 +284,6 @@ func run(ctx context.Context, c *cli.Command, backends []types.Backend) error {
 	})
 
 	for i := 0; i < maxWorkflows; i++ {
-		i := i
 		serviceWaitingGroup.Go(func() error {
 			runner := agent.NewRunner(client, filter, hostname, counter, &backendEngine)
 			log.Debug().Msgf("created new runner %d", i)
@@ -297,7 +296,6 @@ func run(ctx context.Context, c *cli.Command, backends []types.Backend) error {
 				log.Debug().Msg("polling new steps")
 				if err := runner.Run(agentCtx, shutdownCtx); err != nil {
 					log.Error().Err(err).Msg("runner error, retrying...")
-					// Check if context is canceled
 					if agentCtx.Err() != nil {
 						return nil
 					}
@@ -306,7 +304,6 @@ func run(ctx context.Context, c *cli.Command, backends []types.Backend) error {
 					case <-agentCtx.Done():
 						return nil
 					case <-time.After(time.Second * 5):
-						// Continue to next iteration
 					}
 				}
 			}
@@ -333,7 +330,7 @@ func runWithRetry(backendEngines []types.Backend) func(ctx context.Context, c *c
 		var err error
 		for i := 0; i < retryCount; i++ {
 			if err = run(ctx, c, backendEngines); status.Code(err) == codes.Unavailable {
-				log.Warn().Err(err).Msg(fmt.Sprintf("cannot connect to server, retrying in %v", retryDelay))
+				log.Warn().Err(err).Msgf("cannot connect to server, retrying in %v", retryDelay)
 				time.Sleep(retryDelay)
 			} else {
 				break
