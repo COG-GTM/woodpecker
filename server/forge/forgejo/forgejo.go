@@ -606,26 +606,40 @@ func getStatus(status model.StatusValue) forgejo.StatusState {
 	}
 }
 
-func (c *Forgejo) getChangedFilesForPR(ctx context.Context, repo *model.Repo, index int64) ([]string, error) {
+// repoOwnerClient resolves the stored repo and returns a client authenticated as its owner.
+// ok is false when no store is available in ctx.
+func (c *Forgejo) repoOwnerClient(ctx context.Context, repo *model.Repo) (*forgejo.Client, *model.Repo, bool, error) {
 	_store, ok := store.TryFromContext(ctx)
 	if !ok {
 		log.Error().Msg("could not get store from context")
-		return []string{}, nil
+		return nil, nil, false, nil
 	}
 
 	repo, err := _store.GetRepoNameFallback(repo.ForgeRemoteID, repo.FullName)
 	if err != nil {
-		return nil, err
+		return nil, nil, true, err
 	}
 
 	user, err := _store.GetUser(repo.UserID)
 	if err != nil {
-		return nil, err
+		return nil, nil, true, err
 	}
 
 	client, err := c.newClientToken(ctx, user.AccessToken)
 	if err != nil {
+		return nil, nil, true, err
+	}
+
+	return client, repo, true, nil
+}
+
+func (c *Forgejo) getChangedFilesForPR(ctx context.Context, repo *model.Repo, index int64) ([]string, error) {
+	client, repo, ok, err := c.repoOwnerClient(ctx, repo)
+	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return []string{}, nil
 	}
 
 	return shared_utils.Paginate(func(page int) ([]string, error) {
@@ -644,24 +658,8 @@ func (c *Forgejo) getChangedFilesForPR(ctx context.Context, repo *model.Repo, in
 }
 
 func (c *Forgejo) getTagCommitSHA(ctx context.Context, repo *model.Repo, tagName string) (string, error) {
-	_store, ok := store.TryFromContext(ctx)
-	if !ok {
-		log.Error().Msg("could not get store from context")
-		return "", nil
-	}
-
-	repo, err := _store.GetRepoNameFallback(repo.ForgeRemoteID, repo.FullName)
-	if err != nil {
-		return "", err
-	}
-
-	user, err := _store.GetUser(repo.UserID)
-	if err != nil {
-		return "", err
-	}
-
-	client, err := c.newClientToken(ctx, user.AccessToken)
-	if err != nil {
+	client, repo, ok, err := c.repoOwnerClient(ctx, repo)
+	if !ok || err != nil {
 		return "", err
 	}
 
