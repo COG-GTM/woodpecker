@@ -97,7 +97,7 @@ type dirGraphQLResponse struct {
 // graphqlEndpoint returns the GraphQL API URL for this forge client.
 // GitHub.com uses https://api.github.com/graphql; GitHub Enterprise uses {url}/api/graphql.
 func (c *client) graphqlEndpoint() string {
-	if c.url == defaultURL || c.API == defaultAPI {
+	if c.url == defaultURL {
 		return "https://api.github.com/graphql"
 	}
 	return strings.TrimSuffix(c.url, "/") + "/api/graphql"
