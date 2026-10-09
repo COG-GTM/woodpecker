@@ -16,6 +16,7 @@ package log
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -31,14 +32,14 @@ var logPurgeCmd = &cli.Command{
 	Action:    logPurge,
 }
 
-func logPurge(ctx context.Context, c *cli.Command) (err error) {
+func logPurge(ctx context.Context, c *cli.Command) error {
 	client, err := internal.NewClient(ctx, c)
 	if err != nil {
 		return err
 	}
 	repoIDOrFullName := c.Args().First()
 	if len(repoIDOrFullName) == 0 {
-		return fmt.Errorf("missing required argument repo-id / repo-full-name")
+		return errors.New("missing required argument repo-id / repo-full-name")
 	}
 	repoID, err := internal.ParseRepo(client, repoIDOrFullName)
 	if err != nil {
@@ -47,7 +48,7 @@ func logPurge(ctx context.Context, c *cli.Command) (err error) {
 
 	pipelineArg := c.Args().Get(1)
 	if len(pipelineArg) == 0 {
-		return fmt.Errorf("missing required argument pipeline")
+		return errors.New("missing required argument pipeline")
 	}
 	number, err := strconv.ParseInt(pipelineArg, 10, 64)
 	if err != nil {
@@ -70,9 +71,5 @@ func logPurge(ctx context.Context, c *cli.Command) (err error) {
 		fmt.Printf("Purging logs for pipeline %s#%d\n", repoIDOrFullName, number)
 		err = client.LogsPurge(repoID, number)
 	}
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
