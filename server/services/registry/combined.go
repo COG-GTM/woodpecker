@@ -48,30 +48,7 @@ func (c *combined) RegistryListPipeline(repo *model.Repo, pipeline *model.Pipeli
 		return nil, err
 	}
 
-	registries := make([]*model.Registry, 0, len(dbRegistries))
-	exists := make(map[string]struct{}, len(dbRegistries))
-
-	// Assign database stored registries to the map to avoid duplicates
-	// from the combined registries so to prioritize ones in database.
-	for _, reg := range dbRegistries {
-		exists[reg.Address] = struct{}{}
-	}
-
-	for _, registry := range c.registries {
-		list, err := registry.GlobalRegistryList(&model.ListOptions{All: true})
-		if err != nil {
-			return nil, err
-		}
-		for _, reg := range list {
-			if _, ok := exists[reg.Address]; ok {
-				continue
-			}
-			exists[reg.Address] = struct{}{}
-			registries = append(registries, reg)
-		}
-	}
-
-	return append(registries, dbRegistries...), nil
+	return c.mergeWithDB(dbRegistries)
 }
 
 func (c *combined) RegistryCreate(repo *model.Repo, registry *model.Registry) error {
@@ -128,6 +105,30 @@ func (c *combined) GlobalRegistryList(p *model.ListOptions) ([]*model.Registry, 
 		return nil, err
 	}
 
+	registries, err := c.mergeWithDB(dbRegistries)
+	if err != nil {
+		return nil, err
+	}
+
+	return model.ApplyPagination(p, registries), nil
+}
+
+func (c *combined) GlobalRegistryCreate(registry *model.Registry) error {
+	return c.dbRegistry.GlobalRegistryCreate(registry)
+}
+
+func (c *combined) GlobalRegistryUpdate(registry *model.Registry) error {
+	return c.dbRegistry.GlobalRegistryUpdate(registry)
+}
+
+func (c *combined) GlobalRegistryDelete(addr string) error {
+	return c.dbRegistry.GlobalRegistryDelete(addr)
+}
+
+// mergeWithDB appends the global registries of all combined sources to
+// dbRegistries, skipping addresses already present so that registries stored
+// in the database take priority.
+func (c *combined) mergeWithDB(dbRegistries []*model.Registry) ([]*model.Registry, error) {
 	registries := make([]*model.Registry, 0, len(dbRegistries))
 	exists := make(map[string]struct{}, len(dbRegistries))
 
@@ -151,17 +152,5 @@ func (c *combined) GlobalRegistryList(p *model.ListOptions) ([]*model.Registry, 
 		}
 	}
 
-	return model.ApplyPagination(p, append(registries, dbRegistries...)), nil
-}
-
-func (c *combined) GlobalRegistryCreate(registry *model.Registry) error {
-	return c.dbRegistry.GlobalRegistryCreate(registry)
-}
-
-func (c *combined) GlobalRegistryUpdate(registry *model.Registry) error {
-	return c.dbRegistry.GlobalRegistryUpdate(registry)
-}
-
-func (c *combined) GlobalRegistryDelete(addr string) error {
-	return c.dbRegistry.GlobalRegistryDelete(addr)
+	return append(registries, dbRegistries...), nil
 }
