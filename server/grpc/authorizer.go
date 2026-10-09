@@ -24,11 +24,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type StreamContextWrapper interface {
-	grpc.ServerStream
-	SetContext(context.Context)
-}
-
 type wrapper struct {
 	grpc.ServerStream
 	ctx context.Context
@@ -36,18 +31,6 @@ type wrapper struct {
 
 func (w *wrapper) Context() context.Context {
 	return w.ctx
-}
-
-func (w *wrapper) SetContext(ctx context.Context) {
-	w.ctx = ctx
-}
-
-func newStreamContextWrapper(inner grpc.ServerStream) StreamContextWrapper {
-	ctx := inner.Context()
-	return &wrapper{
-		inner,
-		ctx,
-	}
 }
 
 type Authorizer struct {
@@ -59,16 +42,12 @@ func NewAuthorizer(jwtManager *JWTManager) *Authorizer {
 }
 
 func (a *Authorizer) StreamInterceptor(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-	_stream := newStreamContextWrapper(stream)
-
 	newCtx, err := a.authorize(stream.Context(), info.FullMethod)
 	if err != nil {
 		return err
 	}
 
-	_stream.SetContext(newCtx)
-
-	return handler(srv, _stream)
+	return handler(srv, &wrapper{ServerStream: stream, ctx: newCtx})
 }
 
 func (a *Authorizer) UnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
