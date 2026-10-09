@@ -42,31 +42,7 @@ func (d *db) RegistryListPipeline(repo *model.Repo, _ *model.Pipeline) ([]*model
 		return nil, err
 	}
 
-	// Return only registries with unique address
-	// Priority order in case of duplicate addresses are repository, user/organization, global
-	registries := make([]*model.Registry, 0, len(r))
-	uniq := make(map[string]struct{})
-	for _, condition := range []struct {
-		IsRepository   bool
-		IsOrganization bool
-		IsGlobal       bool
-	}{
-		{IsRepository: true},
-		{IsOrganization: true},
-		{IsGlobal: true},
-	} {
-		for _, registry := range r {
-			if registry.IsRepository() != condition.IsRepository || registry.IsOrganization() != condition.IsOrganization || registry.IsGlobal() != condition.IsGlobal {
-				continue
-			}
-			if _, ok := uniq[registry.Address]; ok {
-				continue
-			}
-			uniq[registry.Address] = struct{}{}
-			registries = append(registries, registry)
-		}
-	}
-	return registries, nil
+	return model.UniqueByScopePriority(r, func(item *model.Registry) string { return item.Address }), nil
 }
 
 func (d *db) RegistryCreate(_ *model.Repo, in *model.Registry) error {
