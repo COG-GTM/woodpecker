@@ -127,7 +127,6 @@ func (e *local) StartStep(ctx context.Context, step *types.Step, taskUUID string
 		return err
 	}
 
-	// Get environment variables
 	env := os.Environ()
 	for a, b := range step.Environment {
 		// append allowed env vars to command env
@@ -136,7 +135,6 @@ func (e *local) StartStep(ctx context.Context, step *types.Step, taskUUID string
 		}
 	}
 
-	// Set HOME and CI_WORKSPACE
 	env = append(env, "HOME="+state.homeDir)
 	env = append(env, "USERPROFILE="+state.homeDir)
 	env = append(env, "CI_WORKSPACE="+state.workspaceDir)
