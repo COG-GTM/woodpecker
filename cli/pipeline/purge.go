@@ -95,13 +95,11 @@ func pipelinePurge(c *cli.Command, client woodpecker.Client) (err error) {
 		return err
 	}
 
-	// Create a map of pipeline IDs to keep
 	keepMap := make(map[int64]struct{})
 	for _, p := range pipelinesKeep {
 		keepMap[p.Number] = struct{}{}
 	}
 
-	// Filter pipelines to only include those not in keepMap
 	var pipelinesToPurge []*woodpecker.Pipeline
 	for _, p := range pipelines {
 		if _, exists := keepMap[p.Number]; !exists {
@@ -136,9 +134,6 @@ func pipelinePurge(c *cli.Command, client woodpecker.Client) (err error) {
 }
 
 func fetchPipelinesToKeep(client woodpecker.Client, repoID int64, keepMin int) ([]*woodpecker.Pipeline, error) {
-	if keepMin <= 0 {
-		return nil, nil
-	}
 	return shared_utils.Paginate(func(page int) ([]*woodpecker.Pipeline, error) {
 		return client.PipelineList(repoID,
 			woodpecker.PipelineListOptions{
