@@ -17,6 +17,7 @@ package gitea
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -133,6 +134,46 @@ func Test_gitea(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, model.EventPull, b.Event)
 		assert.Equal(t, []string{"README.md"}, b.ChangedFiles)
+	})
+}
+
+func Test_repoOwnerClient(t *testing.T) {
+	c, _ := New(Opts{URL: "http://localhost:8080"})
+	f, _ := c.(*Gitea)
+
+	t.Run("missing store keeps nil-error fallbacks", func(t *testing.T) {
+		client, repo, ok, err := f.repoOwnerClient(t.Context(), fakeRepo)
+		assert.False(t, ok)
+		assert.NoError(t, err)
+		assert.Nil(t, client)
+		assert.Nil(t, repo)
+
+		files, err := f.getChangedFilesForPR(t.Context(), fakeRepo, 1)
+		assert.NoError(t, err)
+		assert.Equal(t, []string{}, files)
+
+		sha, err := f.getTagCommitSHA(t.Context(), fakeRepo, "v1.0.0")
+		assert.NoError(t, err)
+		assert.Empty(t, sha)
+	})
+
+	t.Run("store error is propagated", func(t *testing.T) {
+		mockStore := mocks_store.NewStore(t)
+		ctx := store.InjectToContext(t.Context(), mockStore)
+		storeErr := errors.New("repo lookup failed")
+		mockStore.On("GetRepoNameFallback", fakeRepo.ForgeRemoteID, fakeRepo.FullName).Return(nil, storeErr)
+
+		_, _, ok, err := f.repoOwnerClient(ctx, fakeRepo)
+		assert.True(t, ok)
+		assert.ErrorIs(t, err, storeErr)
+
+		files, err := f.getChangedFilesForPR(ctx, fakeRepo, 1)
+		assert.ErrorIs(t, err, storeErr)
+		assert.Nil(t, files)
+
+		sha, err := f.getTagCommitSHA(ctx, fakeRepo, "v1.0.0")
+		assert.ErrorIs(t, err, storeErr)
+		assert.Empty(t, sha)
 	})
 }
 
