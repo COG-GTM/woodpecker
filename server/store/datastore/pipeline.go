@@ -101,16 +101,18 @@ func (s storage) GetPipelineList(repo *model.Repo, p *model.ListOptions, f *mode
 func (s storage) GetRepoLatestPipelines(repoIDs []int64) ([]*model.Pipeline, error) {
 	pipelines := make([]*model.Pipeline, 0, len(repoIDs))
 
-	pipelineIDs := make([]int64, 0, len(repoIDs))
-	if err := s.engine.Select("MAX(id) AS id").
-		Table("pipelines").
-		Where(builder.In("repo_id", repoIDs)).
-		GroupBy("repo_id").
-		Find(&pipelineIDs); err != nil {
-		return nil, err
-	}
+	// A per-repo "ORDER BY id DESC LIMIT 1" seeks the repo_id index instead of
+	// aggregating every pipeline of every repo like MAX(id) ... GROUP BY repo_id.
+	latestIDs := builder.Select(`(
+		SELECT p.id FROM pipelines p
+		WHERE p.repo_id = repos.id
+		ORDER BY p.id DESC
+		LIMIT 1
+		)`).
+		From("repos").
+		Where(builder.In("repos.id", repoIDs))
 
-	return pipelines, s.engine.Where(builder.In("id", pipelineIDs)).Find(&pipelines)
+	return pipelines, s.engine.Where(builder.In("id", latestIDs)).Find(&pipelines)
 }
 
 // GetActivePipelineList get all pipelines that are pending, running or blocked.

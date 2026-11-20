@@ -287,3 +287,39 @@ func TestDeletePipeline(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, 1, count)
 }
+
+func TestGetRepoLatestPipelines(t *testing.T) {
+	store, closer := newTestStore(t, new(model.Repo), new(model.Step), new(model.Pipeline))
+	defer closer()
+
+	repo1 := &model.Repo{UserID: 1, FullName: "octocat/one", Owner: "octocat", Name: "one"}
+	repo2 := &model.Repo{UserID: 1, FullName: "octocat/two", Owner: "octocat", Name: "two"}
+	repo3 := &model.Repo{UserID: 1, FullName: "octocat/three", Owner: "octocat", Name: "three"}
+	assert.NoError(t, store.CreateRepo(repo1))
+	assert.NoError(t, store.CreateRepo(repo2))
+	assert.NoError(t, store.CreateRepo(repo3))
+
+	latest := map[int64]int64{}
+	for _, repoID := range []int64{repo1.ID, repo2.ID, repo1.ID, repo2.ID, repo2.ID, repo1.ID} {
+		pipeline := &model.Pipeline{RepoID: repoID, Status: model.StatusSuccess}
+		assert.NoError(t, store.CreatePipeline(pipeline))
+		latest[repoID] = pipeline.ID
+	}
+
+	pipelines, err := store.GetRepoLatestPipelines([]int64{repo1.ID, repo2.ID, repo3.ID})
+	assert.NoError(t, err)
+	got := map[int64]int64{}
+	for _, pipeline := range pipelines {
+		got[pipeline.RepoID] = pipeline.ID
+	}
+	assert.Equal(t, latest, got)
+
+	pipelines, err = store.GetRepoLatestPipelines([]int64{repo2.ID})
+	assert.NoError(t, err)
+	assert.Len(t, pipelines, 1)
+	assert.Equal(t, latest[repo2.ID], pipelines[0].ID)
+
+	pipelines, err = store.GetRepoLatestPipelines([]int64{repo3.ID})
+	assert.NoError(t, err)
+	assert.Empty(t, pipelines)
+}
